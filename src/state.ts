@@ -1,0 +1,191 @@
+import { BOOKS, SKILLS, START_BOOK, isBook, lvUpCost } from './skills';
+
+export const HOTBAR_SIZE = 5;
+/** 持ち歩けるスキルブックの数 */
+export const MAX_CARRY = 3;
+
+/** セーブデータの版。2 = 3系統（パラメタ・技・窮地）のスキルブック */
+export const SAVE_VER = 2;
+
+/** 呪われた本。no は拾った順の通し番号（浄化するまで変わらない） */
+export interface CursedBook {
+  no: number;
+  book: string;
+}
+
+export interface SaveData {
+  ver: number;
+  gold: number;
+  /** 未使用の経験値 (SPに変換できる) */
+  exp: number;
+  sp: number;
+  /** これまでにEXPから変換したSPの数 (変換コストが上がる) */
+  spBought: number;
+  /** 持っているすべての本 */
+  books: string[];
+  /** かばんに入れて持ち歩いている本（最大 MAX_CARRY 冊）。残りは家の本棚にある */
+  carried: string[];
+  /** 本ごとのレベル。本はレベル0（効果なし）から始まる */
+  bookLv: Record<string, number>;
+  /**
+   * ダンジョンで拾ったまま、まだ浄化していない呪われた本。正体が分からず使えない。
+   * 持っている本と同じ本のこともある。かばんの枠は使わない
+   */
+  cursed: CursedBook[];
+  /** これまでに拾った呪われた本の数（通し番号に使う） */
+  curseSeq: number;
+  /** 同じ本の予備（本の id → 冊数）。道具屋で売れる */
+  spares: Record<string, number>;
+  /** 覚えたスキル（本のレベルから決まる） */
+  learned: string[];
+  hotbar: (string | null)[];
+  /** 装備中の武器・防具と、持っている武器・防具 */
+  weapon: string;
+  armor: string;
+  weapons: string[];
+  armors: string[];
+  /** 鍛冶で鍛えた段階（装備の id → +n） */
+  plus: Record<string, number>;
+  /** 持っている鉱石（鉱石の id → 個数） */
+  ores: Record<string, number>;
+  /** 持っている魔物の素材（素材の id → 個数）。武器作成に使う */
+  mats: Record<string, number>;
+  potions: number;
+  ethers: number;
+  maxFloor: number;
+  cleared: boolean;
+  /** 古いセーブから移行したときの知らせ（一度表示したら消す） */
+  notice?: string;
+}
+
+export function newSave(): SaveData {
+  return {
+    ver: SAVE_VER,
+    gold: 100,
+    exp: 0,
+    sp: 3,
+    spBought: 0,
+    books: [START_BOOK],
+    carried: [START_BOOK],
+    bookLv: { [START_BOOK]: 0 },
+    cursed: [],
+    curseSeq: 0,
+    spares: {},
+    learned: [],
+    hotbar: Array(HOTBAR_SIZE).fill(null),
+    weapon: 'dagger',
+    armor: 'cloth',
+    weapons: ['dagger'],
+    armors: ['cloth'],
+    plus: {},
+    ores: {},
+    mats: {},
+    potions: 2,
+    ethers: 1,
+    maxFloor: 0,
+    cleared: false,
+  };
+}
+
+/** n個目のSPを得るのに必要なEXP */
+export function spCost(n: number): number {
+  return 25 + 12 * n;
+}
+
+const KEY = 'skillbook-hunter-save-v1';
+
+export function saveGame(d: SaveData): void {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(d));
+  } catch {
+    /* ストレージが使えない環境では保存しない */
+  }
+}
+
+export function loadGame(): SaveData | null {
+  try {
+    const s = localStorage.getItem(KEY);
+    if (!s) return null;
+    const raw = JSON.parse(s) as Partial<SaveData>;
+    const d = { ...newSave(), ...raw };
+    if ((raw.ver ?? 1) < SAVE_VER) migrateV1(d, raw);
+    migrateCursed(d, raw);
+    d.books = d.books.filter(isBook);
+    d.carried = d.carried.filter((b) => d.books.includes(b)).slice(0, MAX_CARRY);
+    if (d.books.length === 0) {
+      d.books = [START_BOOK];
+      d.carried = [START_BOOK];
+    }
+    d.spares = Object.fromEntries(Object.entries(d.spares ?? {}).filter(([id, n]) => d.books.includes(id) && n > 0));
+    // 本のレベルで覚えるスキルをそろえる
+    for (const id of d.books) {
+      const b = BOOKS.find((x) => x.id === id);
+      if (!b) continue;
+      d.bookLv[id] = Math.min(b.maxLv, d.bookLv[id] ?? 0);
+      for (const s of b.skills) if (SKILLS[s].lv <= d.bookLv[id] && !d.learned.includes(s)) d.learned.push(s);
+    }
+    d.learned = d.learned.filter((s) => SKILLS[s]);
+    d.hotbar = Array.from({ length: HOTBAR_SIZE }, (_, i) => {
+      const id = d.hotbar[i] ?? null;
+      return id && d.learned.includes(id) && SKILLS[id].kind === 'active' ? id : null;
+    });
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 呪われた本をそろえる。呪われた本を「持っている本」として扱っていた版のセーブは、
+ * 本の一覧から外して呪われた本の山へ移す。
+ */
+function migrateCursed(d: SaveData, raw: Partial<SaveData>) {
+  const old = raw as { cursed?: unknown[]; cursedNo?: Record<string, number> };
+  const list: CursedBook[] = [];
+  (old.cursed ?? []).forEach((c, i) => {
+    if (typeof c === 'string') {
+      if (!isBook(c)) return;
+      d.books = d.books.filter((b) => b !== c);
+      d.carried = d.carried.filter((b) => b !== c);
+      delete d.bookLv[c];
+      list.push({ no: old.cursedNo?.[c] ?? i + 1, book: c });
+    } else if (c && typeof c === 'object' && isBook((c as CursedBook).book)) {
+      list.push({ no: Number((c as CursedBook).no) || i + 1, book: (c as CursedBook).book });
+    }
+  });
+  d.cursed = list;
+  d.curseSeq = Math.max(d.curseSeq || 0, Object.keys(old.cursedNo ?? {}).length, ...list.map((c) => c.no));
+  delete (d as { cursedNo?: unknown }).cursedNo;
+}
+
+/** 旧版（ver 1）の本の値段。道具屋で買った本は代金を返す */
+const V1_SHOP_PRICE: Record<string, number> = { healer: 250, sword: 350, guard: 600 };
+
+/**
+ * 旧版のセーブを新しいスキルブックの仕組みへ移す。
+ * 本はすべて新しい仕組みのものに入れ替わるので、本のレベル上げに使ったSPと、道具屋で本を買った代金を返す。
+ */
+function migrateV1(d: SaveData, raw: Partial<SaveData>) {
+  const oldBooks = raw.books ?? [];
+  const oldLv = raw.bookLv ?? {};
+  let sp = 0;
+  let gold = 0;
+  for (const id of oldBooks) {
+    for (let lv = 1; lv < (oldLv[id] ?? 1); lv++) sp += lvUpCost(lv);
+    gold += V1_SHOP_PRICE[id] ?? 0;
+  }
+  // 装備と鍛えた段階はそのまま引き継ぐ（鎧は新しい「防御力」で計算される）
+  d.ver = SAVE_VER;
+  d.books = [START_BOOK];
+  d.carried = [START_BOOK];
+  d.bookLv = { [START_BOOK]: 1 };
+  d.learned = ['smash'];
+  d.hotbar = ['smash', ...Array(HOTBAR_SIZE - 1).fill(null)];
+  d.sp += sp;
+  d.gold += gold;
+  d.notice = `スキルブックが「パラメタ・技・窮地」の3系統に生まれ変わった！ 古い本の代わりに『剣技の書・初級』を受け取り、本のレベル上げに使った SP ${sp} と、本の代金 ${gold} G が戻ってきた。`;
+}
+
+export function hasSave(): boolean {
+  return loadGame() !== null;
+}

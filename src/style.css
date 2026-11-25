@@ -1,0 +1,1409 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0b0910;
+  overflow: hidden;
+  font-family: 'DotGothic16', 'Yu Gothic', 'Meiryo', sans-serif;
+  color: #f3ead8;
+}
+
+#wrap {
+  position: fixed;
+  inset: 0;
+}
+
+#game {
+  display: block;
+  background: #000;
+}
+
+#ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- HUD */
+
+.hud {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 260px;
+  padding: 8px 10px;
+  background: rgba(20, 14, 26, 0.8);
+  border: 2px solid #8a6a3a;
+  border-radius: 6px;
+}
+
+.hud .name {
+  font-size: 13px;
+  color: #ffd88a;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.hud .loc {
+  color: #c8b89a;
+}
+
+.bar {
+  position: relative;
+  height: 16px;
+  background: #2a2030;
+  border: 1px solid #000;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  transition: width 0.12s;
+}
+
+.bar.hp .fill {
+  background: linear-gradient(#ff7a6a, #c8302a);
+}
+
+.bar.mp .fill {
+  background: linear-gradient(#7ab8ff, #2a5ac8);
+}
+
+.bar .lbl,
+.bar .txt {
+  position: absolute;
+  top: 0;
+  font-size: 12px;
+  line-height: 15px;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.bar .lbl {
+  left: 6px;
+}
+
+.bar .txt {
+  right: 6px;
+}
+
+.stats {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.stats .gold {
+  color: #ffd84a;
+  margin-left: auto;
+}
+
+.stats .ready {
+  color: #9fe870;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.hotbar {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+
+.slot {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  background: rgba(20, 14, 26, 0.88);
+  border: 2px solid #8a6a3a;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  overflow: hidden;
+}
+
+.slot .key {
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  font-size: 11px;
+  color: #ffd88a;
+  z-index: 2;
+}
+
+.slot .cost {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 10px;
+  color: #8ac0ff;
+  z-index: 2;
+}
+
+.slot .cd {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1;
+}
+
+.slot.empty {
+  opacity: 0.55;
+}
+
+.slot.nomp .icon {
+  opacity: 0.3;
+}
+
+.slot.item {
+  border-color: #5a7a4a;
+}
+
+.slot.sep {
+  margin-left: 14px;
+}
+
+.slot .cnt {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 12px;
+}
+
+.log {
+  position: absolute;
+  left: 10px;
+  bottom: 74px;
+  width: 440px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log .msg {
+  align-self: flex-start;
+  background: rgba(10, 6, 14, 0.65);
+  padding: 2px 8px;
+  border-radius: 3px;
+  transition: opacity 1s;
+  text-shadow: 1px 1px 0 #000;
+}
+
+.log .msg.fade {
+  opacity: 0;
+}
+
+.help {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  font-size: 11px;
+  color: #c8b89a;
+  background: rgba(10, 6, 14, 0.55);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------- モーダル */
+
+.modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 3, 8, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.panel {
+  background: linear-gradient(#2c2032, #1c1422);
+  border: 3px solid #b08a4a;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 2px #000,
+    0 10px 40px rgba(0, 0, 0, 0.6);
+  padding: 16px 20px;
+  max-width: calc(100vw - 24px);
+  max-height: min(600px, calc(100vh - 24px));
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #ffd88a;
+  font-weight: normal;
+}
+
+.phead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.pstats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  font-size: 15px;
+}
+
+.pstats b {
+  color: #ffd84a;
+  font-weight: normal;
+  font-size: 18px;
+}
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  color: #2a1a0a;
+  background: linear-gradient(#ffe8a8, #e0b860);
+  border: 2px solid #6a4a1a;
+  border-radius: 5px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.sub {
+  background: linear-gradient(#cfc4b4, #9a8e7e);
+}
+
+button.x {
+  background: none;
+  border: none;
+  color: #c8b89a;
+  font-size: 20px;
+  padding: 0 4px;
+}
+
+.btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.btns.col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.btns button {
+  font-size: 16px;
+  padding: 8px 22px;
+}
+
+.npc {
+  margin: 6px 0;
+  color: #f3ead8;
+}
+
+.note {
+  color: #c8b89a;
+  font-size: 13px;
+}
+
+/* タイトル */
+.title-panel {
+  width: 560px;
+  align-items: center;
+  text-align: center;
+}
+
+.logo {
+  font-size: 36px;
+  color: #ffd84a;
+  text-shadow:
+    3px 3px 0 #6a3a10,
+    0 0 20px rgba(255, 200, 80, 0.4);
+  margin: 6px 0 8px;
+}
+
+.logo-icon {
+  margin-right: 8px;
+}
+
+.title-panel .sub {
+  color: #e8dcc0;
+  line-height: 1.6;
+}
+
+.ctrl {
+  margin: 14px auto 0;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ctrl td {
+  padding: 3px 12px;
+  border-bottom: 1px dashed rgba(176, 138, 74, 0.35);
+  text-align: left;
+}
+
+.ctrl td:first-child {
+  color: #ffd88a;
+  text-align: right;
+}
+
+.help-panel {
+  width: 600px;
+}
+
+.tips {
+  font-size: 13px;
+  line-height: 1.7;
+  padding-left: 20px;
+  color: #e8dcc0;
+}
+
+.tips b {
+  color: #ffd84a;
+  font-weight: normal;
+}
+
+.small-panel {
+  width: 460px;
+  text-align: center;
+}
+
+.small-panel h2 {
+  margin-bottom: 8px;
+}
+
+.death h2 {
+  color: #ff8080;
+}
+
+.clear .logo {
+  font-size: 30px;
+}
+
+/* スキルブック */
+.book-panel {
+  width: 900px;
+  height: min(580px, calc(100vh - 24px));
+}
+
+.book-body {
+  display: flex;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.book-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 230px;
+  overflow-y: auto;
+}
+
+.book-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 4px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 14px;
+}
+
+.book-list li:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.book-list li.sel {
+  border-color: #d8b060;
+  background: rgba(216, 176, 96, 0.15);
+}
+
+.book-list li small {
+  margin-left: auto;
+  color: #c8b89a;
+}
+
+.book-list li.hint {
+  cursor: default;
+  background: none;
+  font-size: 12px;
+  color: #a89a80;
+  display: block;
+  line-height: 1.6;
+}
+
+.bk {
+  width: 14px;
+  height: 18px;
+  border-radius: 2px;
+  background: var(--c);
+  box-shadow:
+    inset 3px 0 0 rgba(0, 0, 0, 0.35),
+    0 0 0 1px #000;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9fe870;
+  box-shadow: 0 0 6px #9fe870;
+}
+
+.book-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.bhead {
+  border-left: 6px solid var(--c);
+  padding: 4px 12px;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.bhead h3 {
+  margin: 2px 0;
+  font-weight: normal;
+  font-size: 18px;
+}
+
+.bhead p {
+  margin: 2px 0 4px;
+  font-size: 13px;
+  color: #c8b89a;
+}
+
+.skill,
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(176, 138, 74, 0.4);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.skill.learned {
+  border-color: #6a9a4a;
+  background: rgba(100, 160, 70, 0.1);
+}
+
+.sicon {
+  width: 46px;
+  height: 46px;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #6a4a1a;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.sicon.book {
+  border-color: var(--c);
+  box-shadow: inset 0 0 12px var(--c);
+}
+
+.sinfo {
+  flex: 1;
+}
+
+.sname {
+  font-size: 16px;
+}
+
+.sname small {
+  color: #c8b89a;
+  margin-left: 6px;
+  font-size: 12px;
+}
+
+.tag {
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.tag.active {
+  background: #a0502a;
+}
+
+.tag.passive {
+  background: #3a6a8a;
+}
+
+.smeta {
+  font-size: 12px;
+  color: #8ac0ff;
+  margin: 2px 0;
+}
+
+.req {
+  color: #ff9a7a;
+  margin-left: 8px;
+}
+
+.req.ok {
+  color: #9fe870;
+}
+
+.sdesc {
+  font-size: 13px;
+  color: #e0d4bc;
+}
+
+.sact {
+  min-width: 120px;
+  text-align: center;
+}
+
+.slotlbl {
+  font-size: 11px;
+  color: #c8b89a;
+  margin-bottom: 3px;
+}
+
+.slots {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+}
+
+.slots .sb {
+  padding: 3px 7px;
+  font-size: 12px;
+  background: linear-gradient(#5a4a5e, #3a2e40);
+  color: #e8dcc0;
+  border-color: #000;
+}
+
+.slots .sb.on {
+  background: linear-gradient(#ffe8a8, #e0b860);
+  color: #2a1a0a;
+}
+
+.done {
+  color: #9fe870;
+  font-size: 14px;
+}
+
+.lock {
+  color: #a89a80;
+  font-size: 12px;
+}
+
+.hotbar-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(176, 138, 74, 0.4);
+  font-size: 13px;
+}
+
+.hotbar-edit .hl {
+  color: #ffd88a;
+}
+
+.hslot {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hslot .k {
+  color: #ffd88a;
+  margin-right: 6px;
+}
+
+.hslot em {
+  color: #7a6e60;
+  font-style: normal;
+}
+
+/* 道具屋 */
+.shop-panel {
+  width: 680px;
+}
+
+.shop-list {
+  overflow-y: auto;
+  max-height: 440px;
+  padding-right: 4px;
+}
+
+.shop-list h4 {
+  margin: 10px 0 6px;
+  font-weight: normal;
+  color: #ffd88a;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.4);
+}
+
+.srow.learned {
+  opacity: 0.6;
+}
+
+/* スクロールバー */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #6a4a2a;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------- 本棚・かばん */
+
+.slot.away .icon {
+  opacity: 0.25;
+  filter: grayscale(1);
+}
+
+.slot.away::after {
+  content: '📚';
+  position: absolute;
+  right: 2px;
+  top: 1px;
+  font-size: 11px;
+  z-index: 2;
+}
+
+.book-list li.group {
+  cursor: default;
+  background: none;
+  color: #ffd88a;
+  font-size: 12px;
+  padding: 6px 4px 2px;
+  border: none;
+}
+
+.book-list li.shelved {
+  opacity: 0.55;
+}
+
+.skill.shelved {
+  opacity: 0.6;
+}
+
+.shelf-panel {
+  width: 860px;
+}
+
+.shelf-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.shelf-body h4 {
+  margin: 4px 0 8px;
+  font-weight: normal;
+  color: #ffd88a;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.4);
+}
+
+.bcard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(176, 138, 74, 0.4);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.bcard.empty {
+  justify-content: center;
+  min-height: 64px;
+  color: #7a6e60;
+  border-style: dashed;
+}
+
+.bcard .spine {
+  width: 14px;
+  align-self: stretch;
+  min-height: 48px;
+  border-radius: 2px;
+  background: var(--c);
+  box-shadow:
+    inset 3px 0 0 rgba(0, 0, 0, 0.35),
+    inset 0 4px 0 rgba(232, 192, 80, 0.8),
+    inset 0 -4px 0 rgba(232, 192, 80, 0.8),
+    0 0 8px var(--c);
+  flex-shrink: 0;
+}
+
+.bcard .binfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.bcard .bname {
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.bcard .bskills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.bcard .sk {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #8a7e6e;
+}
+
+.bcard .sk.on {
+  background: rgba(100, 160, 70, 0.25);
+  color: #c8f0a8;
+}
+
+.bcard .bact button {
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 本のレベル */
+
+.bhead h3 .blv {
+  margin-left: 12px;
+  font-size: 15px;
+  color: #ffd84a;
+}
+
+.bcard .bname .blv {
+  color: #ffd84a;
+  font-size: 12px;
+}
+
+.lvrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 2px;
+}
+
+.lvtrack {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lvstep {
+  flex: 1;
+  max-width: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 0 4px;
+  border-radius: 5px;
+  border: 1px solid rgba(176, 138, 74, 0.35);
+  background: rgba(0, 0, 0, 0.3);
+  color: #7a6e60;
+  font-size: 11px;
+}
+
+.lvstep .i {
+  font-size: 18px;
+  line-height: 1.3;
+  filter: grayscale(1) opacity(0.5);
+}
+
+.lvstep.on {
+  color: #ffe8a8;
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 30%, rgba(0, 0, 0, 0.3));
+}
+
+.lvstep.on .i {
+  filter: none;
+}
+
+.lvstep.cur {
+  box-shadow: 0 0 8px var(--c);
+}
+
+.lvact {
+  min-width: 130px;
+  text-align: center;
+}
+
+.lvnext {
+  font-size: 12px;
+  color: #c8b89a;
+  margin-bottom: 4px;
+}
+
+.lvnext b {
+  color: #ffd84a;
+  font-weight: normal;
+}
+
+.slv {
+  display: inline-block;
+  font-size: 11px;
+  padding: 0 5px;
+  margin-right: 6px;
+  border-radius: 3px;
+  background: rgba(255, 216, 74, 0.15);
+  color: #ffd84a;
+  vertical-align: 1px;
+}
+
+.skill.unlearned .sicon {
+  filter: grayscale(1) opacity(0.55);
+}
+
+.lvreq {
+  color: #c8b89a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- 武器防具屋 */
+
+.eqstat {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #ffd84a;
+}
+
+.eqnow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  color: #c8b89a;
+}
+
+.eqnow b {
+  font-weight: normal;
+  color: #f3ead8;
+}
+
+.eqnow small {
+  color: #ffd84a;
+  margin-right: 8px;
+}
+
+.srow.equipped {
+  border-color: #6a9a4a;
+  background: rgba(100, 160, 70, 0.12);
+}
+
+/* ---------------------------------------------------------------- 鍛冶場 */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 8px;
+  border-bottom: 2px solid rgba(176, 138, 74, 0.5);
+}
+
+.tabs .tab {
+  border-radius: 6px 6px 0 0;
+  border-bottom: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c8b89a;
+  padding: 5px 16px;
+}
+
+.tabs .tab.on {
+  background: linear-gradient(#ffe8a8, #e0b860);
+  color: #2a1a0a;
+}
+
+.pips {
+  margin-left: 10px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #ffb040;
+}
+
+.eqtag {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(100, 160, 70, 0.35);
+  color: #c8f0a8;
+}
+
+.forge-row .sdesc b {
+  color: #ffd84a;
+  font-weight: normal;
+}
+
+.forge-row.forged,
+.craft-row.forged {
+  animation: forged 0.7s ease-out;
+}
+
+.forge-row.forged .sicon,
+.craft-row.forged .sicon {
+  animation: clang 0.35s ease-out 2;
+}
+
+@keyframes forged {
+  0% {
+    background: rgba(255, 170, 60, 0.75);
+    box-shadow: 0 0 24px rgba(255, 150, 40, 0.9);
+  }
+  100% {
+    background: rgba(0, 0, 0, 0.2);
+    box-shadow: none;
+  }
+}
+
+@keyframes clang {
+  0% {
+    transform: rotate(0) scale(1);
+  }
+  30% {
+    transform: rotate(-12deg) scale(1.18);
+  }
+  60% {
+    transform: rotate(8deg) scale(0.96);
+  }
+  100% {
+    transform: rotate(0) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------- 鉱石 */
+
+.orebag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(60, 50, 80, 0.45);
+  font-size: 13px;
+}
+
+.orebag span {
+  color: #c8b89a;
+  font-size: 12px;
+}
+
+.orebag b {
+  font-weight: normal;
+  color: #f0ead8;
+}
+
+.orebag b.none {
+  opacity: 0.45;
+}
+
+.oreneed {
+  margin-left: 10px;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.oreneed.ok {
+  background: rgba(100, 160, 70, 0.3);
+  color: #c8f0a8;
+}
+
+.oreneed.short {
+  background: rgba(180, 60, 50, 0.3);
+  color: #ffa898;
+}
+
+/* ---------------------------------------------------------------- 武器作成 */
+
+.orebag.mats {
+  background: rgba(80, 50, 60, 0.45);
+}
+
+.recipe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.recipe .oreneed {
+  margin-left: 0;
+}
+
+.eqfx {
+  color: #9fe8ff;
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- 2段階の書の状態（HUD） */
+
+.hud .stance {
+  display: none;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #ffe6a8;
+}
+
+.hud .stance.on {
+  display: block;
+  text-shadow: 0 0 6px rgba(255, 200, 100, 0.6);
+}
+
+/* ---------------------------------------------------------------- パラメタと窮地（HUD） */
+.params {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+  font-size: 12px;
+  margin-top: 5px;
+  color: #d8ccb4;
+}
+.params .up,
+.bparams .up {
+  color: #ff8a7a;
+  text-shadow: 0 0 6px rgba(255, 80, 60, 0.7);
+}
+.hud .pinch {
+  display: none;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #ffb0a0;
+}
+.hud .pinch.on {
+  display: block;
+  animation: pulse 1s infinite;
+}
+
+/* ---------------------------------------------------------------- 本の系統 */
+.ktag {
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+  color: #fff;
+  white-space: nowrap;
+}
+.ktag.tech {
+  background: #8a4a2a;
+}
+.ktag.stat {
+  background: #3a6a5a;
+}
+.ktag.pinch {
+  background: #a02a3a;
+}
+.kmini {
+  font-style: normal;
+  font-size: 10px;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #fff;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.kmini.tech {
+  background: #8a4a2a;
+}
+.kmini.stat {
+  background: #3a6a5a;
+}
+.kmini.pinch {
+  background: #a02a3a;
+}
+.bparams {
+  display: flex;
+  gap: 18px;
+  font-size: 13px;
+  padding: 0 4px 8px;
+  color: #d8ccb4;
+}
+.bparams b {
+  color: #ffe8a8;
+}
+.lvstep.stat .i,
+.lvstep.pinch .i {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.wneed {
+  font-size: 12px;
+  padding: 4px 10px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+}
+.wneed.ok {
+  color: #9fe870;
+}
+.wneed.ng {
+  color: #ffb060;
+}
+
+/* パラメタの書・窮地の書の効果 */
+.effect-card {
+  display: flex;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(176, 138, 74, 0.45);
+  background: rgba(0, 0, 0, 0.25);
+}
+.effect-card .ecur {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.effect-card .elbl {
+  font-size: 12px;
+  color: #c8b89a;
+}
+.effect-card .eval {
+  font-size: 17px;
+  color: #ffe8a8;
+}
+.effect-card .elv {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 46%;
+  font-size: 12px;
+}
+.effect-card .elv li {
+  padding: 2px 6px;
+  color: #7a6e60;
+  border-radius: 3px;
+}
+.effect-card .elv li.on {
+  color: #e8dcc0;
+}
+.effect-card .elv li.cur {
+  background: rgba(255, 216, 74, 0.12);
+  color: #ffe8a8;
+}
+.effect-card .elv .n {
+  display: inline-block;
+  width: 34px;
+  color: #ffd84a;
+}
+.pinch-on {
+  color: #ff8a7a;
+  animation: pulse 1s infinite;
+}
+@media (max-width: 640px) {
+  .effect-card {
+    flex-direction: column;
+  }
+  .bparams {
+    gap: 10px;
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+}
+
+.bparams {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.bparams .luckfx {
+  font-size: 11px;
+  color: #a8c890;
+  margin-left: auto;
+}
+
+/* 呪われた本・神殿 */
+.ktag.curse,
+.kmini.curse {
+  background: #4a2a6a;
+  color: #e8d0ff;
+}
+.book-list li.cursed .bn,
+.bcard.cursed .bname {
+  color: #c8a8e8;
+}
+.book-list li.cursed .bk,
+.bcard.cursed .spine {
+  box-shadow:
+    inset 3px 0 0 rgba(0, 0, 0, 0.35),
+    0 0 0 1px #000,
+    0 0 6px #a050e0;
+  animation: curse 2.4s ease-in-out infinite;
+}
+@keyframes curse {
+  50% {
+    filter: brightness(1.5);
+  }
+}
+.bhead.cursed h3 {
+  color: #d8b8ff;
+}
+.curse-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #6a3a8a;
+  background: rgba(60, 20, 90, 0.25);
+  font-size: 13px;
+  line-height: 1.7;
+  color: #e0d0f0;
+}
+.curse-card b {
+  color: #fff0a8;
+  font-weight: normal;
+}
+.curse-card .cicon {
+  font-size: 34px;
+  filter: drop-shadow(0 0 6px #a050e0);
+}
+.srow.cursed {
+  border-color: #6a3a8a;
+  background: rgba(60, 20, 90, 0.22);
+}
+.srow.cursed .sname {
+  color: #d8b8ff;
+}
+.temple-panel .phead h2 {
+  color: #fff0c0;
+}
+.reveal {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--c);
+  background: radial-gradient(ellipse at top, rgba(255, 240, 180, 0.16), rgba(0, 0, 0, 0.2));
+  animation: reveal 0.6s ease-out;
+}
+.reveal .rlbl {
+  color: #fff4c0;
+  margin-bottom: 6px;
+}
+.reveal .srow {
+  margin-bottom: 4px;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+.cpow {
+  color: #c8a8e8;
+}
+.cpow.pinch {
+  color: #e890c8;
+}
+.cpow.tech {
+  color: #ff8a9a;
+  text-shadow: 0 0 6px rgba(255, 80, 120, 0.5);
+}
+
+/* 本の予備と買い取り */
+.spare {
+  font-style: normal;
+  font-size: 10px;
+  margin: 0 5px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #5a4a1a;
+  color: #ffe8a0;
+  vertical-align: middle;
+}
+.sellact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+  min-width: 118px;
+}
+.sellact button {
+  font-size: 12px;
+  line-height: 1.25;
+}
+.sellact .lock {
+  text-align: center;
+}
+button.danger {
+  background: linear-gradient(#e86a5a, #a8302a);
+  border-color: #6a1a14;
+  color: #fff;
+}
