@@ -854,6 +854,10 @@ export class Game {
       this.ui.showSkillbook();
       return;
     }
+    if (inp.pressed('KeyI')) {
+      this.ui.showEquipment();
+      return;
+    }
     if (inp.pressed('Escape')) {
       this.ui.showHelp();
       return;
@@ -1844,8 +1848,6 @@ export class Game {
             return { label: '家に入る', act: () => this.goHome(true) };
           case T.HOME_EXIT:
             return { label: '外に出る', act: () => this.goTown(true, 'home') };
-          case T.INN_DOOR:
-            return { label: '宿屋に入る', act: () => this.ui.showInn() };
           case T.TEMPLE_DOOR:
             return { label: '神殿に入る', act: () => this.ui.showTemple() };
           case T.BANK_DOOR:

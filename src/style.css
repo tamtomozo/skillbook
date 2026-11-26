@@ -1290,16 +1290,13 @@ button.x {
 }
 
 /* 呪われた本・神殿 */
-.ktag.curse,
-.kmini.curse {
+.ktag.curse {
   background: #4a2a6a;
   color: #e8d0ff;
 }
-.book-list li.cursed .bn,
 .bcard.cursed .bname {
   color: #c8a8e8;
 }
-.book-list li.cursed .bk,
 .bcard.cursed .spine {
   box-shadow:
     inset 3px 0 0 rgba(0, 0, 0, 0.35),
@@ -1311,29 +1308,6 @@ button.x {
   50% {
     filter: brightness(1.5);
   }
-}
-.bhead.cursed h3 {
-  color: #d8b8ff;
-}
-.curse-card {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #6a3a8a;
-  background: rgba(60, 20, 90, 0.25);
-  font-size: 13px;
-  line-height: 1.7;
-  color: #e0d0f0;
-}
-.curse-card b {
-  color: #fff0a8;
-  font-weight: normal;
-}
-.curse-card .cicon {
-  font-size: 34px;
-  filter: drop-shadow(0 0 6px #a050e0);
 }
 .srow.cursed {
   border-color: #6a3a8a;
@@ -1601,4 +1575,120 @@ button.danger {
 .promo b {
   color: var(--rc);
   font-weight: normal;
+}
+
+/* ---------------------------------------------------------------- 装備の確認 [I] */
+.equip-panel {
+  width: 820px;
+}
+.equip-body {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.equip-body h4 {
+  margin: 4px 0 8px;
+  font-weight: normal;
+  color: #ffd88a;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.4);
+}
+.eqcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 10px 10px;
+  margin-bottom: 8px;
+  border: 1px solid #6a9a4a;
+  border-radius: 6px;
+  background: rgba(100, 160, 70, 0.1);
+}
+.eqcard .eslot {
+  position: absolute;
+  top: 2px;
+  left: 8px;
+  font-size: 11px;
+  color: #a8c890;
+}
+.eqcard .eplus {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #c8b89a;
+}
+.eqcard .estat {
+  font-size: 13px;
+  color: #ffd84a;
+}
+.eqcard .efx {
+  font-size: 12px;
+  color: #c8f0a8;
+}
+.eparams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.eparam {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  color: #c8b89a;
+}
+.eparam b {
+  font-weight: normal;
+  font-size: 18px;
+  color: #f3ead8;
+}
+.eparam small {
+  margin-left: auto;
+  font-size: 11px;
+  color: #a8c890;
+}
+.eqlist {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.eqlist li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  border: 1px solid rgba(176, 138, 74, 0.3);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+}
+.eqlist li.on {
+  border-color: #6a9a4a;
+  background: rgba(100, 160, 70, 0.12);
+}
+.eqlist .n {
+  color: #f3ead8;
+}
+.eqlist small {
+  order: 1;
+  flex-basis: 100%;
+  padding-left: 26px;
+  font-size: 11px;
+  color: #c8b89a;
+}
+.eqlist em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11px;
+  color: #9fe870;
+}
+@media (max-width: 640px) {
+  .equip-body {
+    grid-template-columns: 1fr;
+  }
 }

@@ -5,11 +5,11 @@ import { FIELD_DUNGEONS, RANKS, RANK_B, RUINS, dungeonById, rankDef, trialFor, t
 import { BOOKS, BOOK_KIND_NAME, CURSED_NAME, CURSE_COLOR, CURSE_POWER, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, pinchValueText, lvUpCost, pinchText, purifyPrice, sellPrice, spSpent, type BookKind, type Stat } from './skills';
 import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type CursedBook } from './state';
 import type { BookDef } from './skills';
-import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStatText, type Recipe } from './equipment';
+import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStat, weaponStatText, type Recipe } from './equipment';
 
 type SmithyTab = 'shop' | 'forge' | 'craft' | 'sell';
 
-type ModalKind = 'title' | 'book' | 'shop' | 'inn' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple' | 'bank' | 'guild' | 'promo';
+type ModalKind = 'title' | 'book' | 'equip' | 'shop' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple' | 'bank' | 'guild' | 'promo';
 
 const CONTROLS = `
 <table class="ctrl">
@@ -18,6 +18,7 @@ const CONTROLS = `
   <tr><td>1 〜 5</td><td>ホットバーのスキルを使う</td></tr>
   <tr><td>E / Enter</td><td>調べる・宝箱・階段・お店</td></tr>
   <tr><td>K / Tab</td><td>スキルブックを開く</td></tr>
+  <tr><td>I</td><td>装備を確認する</td></tr>
   <tr><td>Q / R</td><td>回復薬 / エーテルを使う</td></tr>
   <tr><td>Esc</td><td>ヘルプ・画面を閉じる</td></tr>
 </table>`;
@@ -75,7 +76,7 @@ export class UI {
         <div class="slot item"><span class="key">R</span><span class="icon">💧</span><span class="cnt ethers"></span></div>
       </div>
       <div class="log"></div>
-      <div class="help">[K] スキルブック　[Esc] ヘルプ</div>
+      <div class="help">[K] スキルブック　[I] 装備　[Esc] ヘルプ</div>
       <div class="modal hidden"></div>`;
     const q = (s: string) => root.querySelector(s) as HTMLElement;
     this.hpFill = q('.bar.hp .fill');
@@ -213,6 +214,7 @@ export class UI {
     if (!this.kind) return;
     if (this.closable && inp.pressed('Escape')) this.close();
     else if (this.kind === 'book' && inp.pressed('KeyK', 'Tab')) this.close();
+    else if (this.kind === 'equip' && inp.pressed('KeyI')) this.close();
   }
 
   showTitle() {
@@ -265,7 +267,7 @@ export class UI {
           <li>体力・MPの上限は<b>100で固定</b>。スキルブックと装備で強くなろう。</li>
           <li><b>武器防具屋</b>では武器（剣・弓・杖・盾）と鎧を売っている。剣・弓は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、弓なら矢、杖なら魔力の弾、盾なら盾で殴る。危険度の高い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。鉱石はダンジョンの壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
           <li>魔物は倒すと、ときどき<b>素材</b>（スライムゼリー・コウモリの翼・ゴブリンの牙など）を落とす。武器防具屋の<b>装備作成</b>タブで、素材と鉱石から<b>店では買えない特別な武器と防具</b>を作れる。作った装備には追加効果がある。</li>
-          <li>宿屋で休むと全回復＆セーブ。倒れると所持金の半分を失って町へ戻される。</li>
+          <li>わが家のベッドで休むと全回復＆セーブ。倒れると所持金の半分を失って町へ戻される。</li>
           <li><b>銀行</b>に預けたゴールドは、倒れても減らない。ダンジョンで階段を降りるたびに少し利息もつく。買い物をするときは引き出そう。</li>
         </ul>
         <div class="btns"><button data-act="close">閉じる</button></div>
@@ -281,13 +283,23 @@ export class UI {
     const d = this.game.data;
     const learned = d.learned.includes(id);
     const carried = this.game.isCarried(this.bookSel);
+    // まだ覚えていない技は、名前も効果も伏せておく
+    if (!learned) {
+      return `
+      <div class="skill unlearned hidden ${carried ? '' : 'shelved'}">
+        <div class="sicon">❔</div>
+        <div class="sinfo">
+          <div class="sname"><span class="slv">Lv${s.lv}</span>？？？</div>
+          <div class="sdesc">まだ覚えていない技。本のレベルを上げると明らかになる。</div>
+        </div>
+        <div class="sact"><span class="lvreq">本が Lv${s.lv} に<br>なると覚える</span></div>
+      </div>`;
+    }
     const block = this.game.skillBlock(id);
     const mp = this.game.mpCost(id);
     const meta = s.kind === 'active' ? `消費MP ${mp}${mp < s.mp ? `（元 ${s.mp}）` : ''}・CT ${s.cd}秒` : '常時発動';
     let act: string;
-    if (!learned) {
-      act = `<span class="lvreq">本が Lv${s.lv} に<br>なると覚える</span>`;
-    } else if (s.kind === 'active') {
+    if (s.kind === 'active') {
       const btns = Array.from(
         { length: HOTBAR_SIZE },
         (_, i) => `<button class="sb ${d.hotbar[i] === id ? 'on' : ''}" data-act="slot" data-arg="${id}:${i}" title="スロット${i + 1}にセット">${i + 1}</button>`,
@@ -297,7 +309,7 @@ export class UI {
       act = block ? `<span class="lock">習得済み<br>（${block.replace('ので使えない', 'ので無効')}）</span>` : `<span class="done">習得済み</span>`;
     }
     return `
-      <div class="skill ${learned ? 'learned' : 'unlearned'} ${carried && !(learned && block) ? '' : 'shelved'}">
+      <div class="skill learned ${carried && !block ? '' : 'shelved'}">
         <div class="sicon">${s.icon}</div>
         <div class="sinfo">
           <div class="sname"><span class="slv">Lv${s.lv}</span>${s.name}<span class="tag ${s.kind}">${s.kind === 'active' ? 'アクティブ' : 'パッシブ'}</span></div>
@@ -342,75 +354,22 @@ export class UI {
   showSkillbook() {
     const g = this.game;
     const d = g.data;
-    // 呪われた本は 'curse:通し番号' で選ぶ
-    const selCurse = d.cursed.find((c) => `curse:${c.no}` === this.bookSel);
-    if (!selCurse && !d.books.includes(this.bookSel)) this.bookSel = d.carried[0] ?? d.books[0];
-    const book = bookById(selCurse ? selCurse.book : this.bookSel);
+    // かばんに入れている本だけを載せる（本棚の本・呪われた本は載せない）
+    if (!d.carried.includes(this.bookSel)) this.bookSel = d.carried[0] ?? '';
     const cost = spCost(d.spBought);
-    const owned = BOOKS.filter((b) => d.books.includes(b.id));
     const item = (b: BookDef) => {
       const lv = g.bookLv(b.id);
       const max = bookMaxLv(b);
-      const carried = d.carried.includes(b.id);
       const learnable = lv < max && d.sp >= lvUpCost(lv);
-      return `<li class="${b.id === this.bookSel ? 'sel' : ''} ${carried ? '' : 'shelved'}" data-act="book" data-arg="${b.id}">
+      return `<li class="${b.id === this.bookSel ? 'sel' : ''}" data-act="book" data-arg="${b.id}">
           <span class="bk" style="--c:${b.color}"></span><span class="bn">${b.name}<i class="kmini ${b.kind}">${BOOK_KIND_NAME[b.kind]}</i></span>
-          ${learnable && carried ? '<span class="dot" title="レベルを上げられる"></span>' : ''}<small>${g.sparesOf(b.id) ? `<i class="spare">予備${g.sparesOf(b.id)}</i>` : ''}Lv${lv}/${max}</small></li>`;
+          ${learnable ? '<span class="dot" title="レベルを上げられる"></span>' : ''}<small>${g.sparesOf(b.id) ? `<i class="spare">予備${g.sparesOf(b.id)}</i>` : ''}Lv${lv}/${max}</small></li>`;
     };
-    const cursedItem = (c: CursedBook) => `<li class="${`curse:${c.no}` === this.bookSel ? 'sel' : ''} cursed" data-act="book" data-arg="curse:${c.no}">
-          <span class="bk" style="--c:${CURSE_COLOR}"></span><span class="bn">${this.cursedName(c)}<i class="kmini curse">呪い</i></span><small>Lv?</small></li>`;
     const inBag = d.carried.map(bookById);
-    const onShelf = owned.filter((b) => !d.carried.includes(b.id));
-    const list =
-      `<li class="group">🎒 かばん ${inBag.length} / ${MAX_CARRY}</li>` +
-      inBag.map(item).join('') +
-      (onShelf.length ? `<li class="group">📚 本棚（家で持ち替え）</li>` + onShelf.map(item).join('') : '') +
-      (d.cursed.length ? `<li class="group">🔒 呪われた本（神殿で浄化）</li>` + d.cursed.map(cursedItem).join('') : '');
-    const lv = g.bookLv(book.id);
-    const max = bookMaxLv(book);
-    const lvCost = lvUpCost(lv);
-    const track = Array.from({ length: max }, (_, i) => {
-      const n = i + 1;
-      let icons: string;
-      if (book.kind === 'tech') icons = book.skills.filter((id) => SKILLS[id].lv === n).map((id) => SKILLS[id].icon).join('') || '・';
-      else if (book.stat) icons = `+${book.stat.perLv * n}`;
-      else icons = pinchValueText(book, i);
-      return `<div class="lvstep ${n <= lv ? 'on' : ''} ${n === lv ? 'cur' : ''} ${book.kind}"><span class="n">Lv${n}</span><span class="i">${icons}</span></div>`;
-    }).join('');
-    const lvAct =
-      lv >= max
-        ? '<span class="done">最大レベル</span>'
-        : !d.carried.includes(book.id)
-          ? '<span class="lock">本棚にあるので<br>レベルを上げられない</span>'
-          : `<button data-act="lvup" data-arg="${book.id}" ${d.sp >= lvCost ? '' : 'disabled'}>レベルアップ <small>SP ${lvCost}</small></button>`;
-    let nextTxt: string;
-    if (book.kind === 'tech') {
-      const next = book.skills.map((id) => SKILLS[id]).filter((sk) => sk.lv > lv).sort((a, b) => a.lv - b.lv)[0];
-      nextTxt = next ? `次は <b>Lv${next.lv}</b> で『${next.name}』を覚える` : 'この本の技をすべて覚えた！';
-    } else {
-      nextTxt = lv < max ? `次の <b>Lv${lv + 1}</b> で ${this.bookEffect(book, lv + 1)}` : 'これ以上は強くならない。';
-    }
-    const wt = book.school ? SCHOOL_WEAPON[book.school] : null;
-    const need = wt
-      ? `<div class="wneed ${g.weaponType === wt ? 'ok' : 'ng'}">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}を装備しているときだけ使える${g.weaponType === wt ? '' : '（いまは装備していない）'}</div>`
-      : '';
-    const cursed = !!selCurse;
-    const body = cursed
-      ? `<div class="curse-card"><div class="cicon">📕</div><div>この本は呪われていて、ページを開くことすらできない。正体も分からない。<br>町の<b>神殿</b>で浄化（${purifyPrice(book)} G）してもらうと、正体が分かり使えるようになる。浄化した本はレベル0から始まる。すでに持っている本だった場合は予備になり、道具屋で売れる。</div></div>`
-      : book.kind === 'tech'
-        ? need + book.skills.map((id) => this.skillCard(id)).join('')
-        : this.effectCard(book);
-    const head = cursed
-      ? `<div class="bhead cursed" style="--c:${CURSE_COLOR}">
-              <h3>${this.cursedName(selCurse!)}<span class="ktag curse">正体不明</span></h3><p>禍々しい気配に包まれた本。ダンジョンの宝箱で見つけた。</p>
-              <div class="lvrow"><div class="lvtrack"></div><div class="lvact"><span class="lock">呪われていて<br>使えない</span></div></div>
-            </div>`
-      : `<div class="bhead" style="--c:${book.color}">
-              <h3>${book.name}<span class="ktag ${book.kind}">${bookTag(book)}</span><span class="blv">Lv ${lv} / ${max}</span></h3><p>${book.desc}</p>
-              <div class="lvrow"><div class="lvtrack">${track}</div><div class="lvact">${lvAct}</div></div>
-              <div class="lvnext">${nextTxt}</div>
-              ${g.sparesOf(book.id) ? `<div class="lvnext">同じ本の予備が <b>${g.sparesOf(book.id)}冊</b> ある（道具屋で ${sellPrice(book)} G で売れる）</div>` : ''}
-            </div>`;
+    const list = `<li class="group">🎒 かばん ${inBag.length} / ${MAX_CARRY}</li>` + inBag.map(item).join('');
+    const detail = this.bookSel
+      ? this.bookDetail(bookById(this.bookSel))
+      : '<p class="note">かばんに本が入っていない。家の本棚で本をかばんに入れよう。</p>';
     const slots = d.hotbar
       .map((id, i) => `<div class="hslot"><span class="k">${i + 1}</span>${id ? `${SKILLS[id].icon} ${SKILLS[id].name}` : '<em>空き</em>'}</div>`)
       .join('');
@@ -436,11 +395,10 @@ export class UI {
         <div class="book-body">
           <ul class="book-list">
             ${list}
-            <li class="hint">所持 ${owned.length} / ${BOOKS.length} 冊<br>本は道具屋やダンジョンの宝箱で手に入る。宝箱の本は呪われているので、神殿で浄化しよう。同じ本は予備になり、道具屋で売れる。<br>本はLv0（効果なし）から始まる。<br>持ち歩けるのは${MAX_CARRY}冊まで</li>
+            <li class="hint">かばんの本だけが載っている。本棚の本は家で持ち替えよう。<br>本は道具屋やダンジョンの宝箱で手に入る。宝箱の本は呪われているので、神殿で浄化しよう。同じ本は予備になり、道具屋で売れる。<br>本はLv0（効果なし）から始まる。<br>持ち歩けるのは${MAX_CARRY}冊まで</li>
           </ul>
           <div class="book-detail">
-            ${head}
-            ${body}
+            ${detail}
           </div>
         </div>
         <div class="hotbar-edit"><span class="hl">ホットバー</span>${slots}</div>
@@ -463,6 +421,120 @@ export class UI {
     );
   }
 
+  /** スキルブックの右側：選んだ本の詳細 */
+  private bookDetail(book: BookDef): string {
+    const g = this.game;
+    const d = g.data;
+    const lv = g.bookLv(book.id);
+    const max = bookMaxLv(book);
+    const lvCost = lvUpCost(lv);
+    const track = Array.from({ length: max }, (_, i) => {
+      const n = i + 1;
+      let icons: string;
+      if (book.kind === 'tech')
+        icons = book.skills.filter((id) => SKILLS[id].lv === n).map((id) => (d.learned.includes(id) ? SKILLS[id].icon : '❔')).join('') || '・';
+      else if (book.stat) icons = `+${book.stat.perLv * n}`;
+      else icons = pinchValueText(book, i);
+      return `<div class="lvstep ${n <= lv ? 'on' : ''} ${n === lv ? 'cur' : ''} ${book.kind}"><span class="n">Lv${n}</span><span class="i">${icons}</span></div>`;
+    }).join('');
+    const lvAct =
+      lv >= max
+        ? '<span class="done">最大レベル</span>'
+        : `<button data-act="lvup" data-arg="${book.id}" ${d.sp >= lvCost ? '' : 'disabled'}>レベルアップ <small>SP ${lvCost}</small></button>`;
+    let nextTxt: string;
+    if (book.kind === 'tech') {
+      const next = book.skills.map((id) => SKILLS[id]).filter((sk) => sk.lv > lv).sort((a, b) => a.lv - b.lv)[0];
+      nextTxt = next ? `次は <b>Lv${next.lv}</b> で新しい技を覚える` : 'この本の技をすべて覚えた！';
+    } else {
+      nextTxt = lv < max ? `次の <b>Lv${lv + 1}</b> で ${this.bookEffect(book, lv + 1)}` : 'これ以上は強くならない。';
+    }
+    const wt = book.school ? SCHOOL_WEAPON[book.school] : null;
+    const need = wt
+      ? `<div class="wneed ${g.weaponType === wt ? 'ok' : 'ng'}">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}を装備しているときだけ使える${g.weaponType === wt ? '' : '（いまは装備していない）'}</div>`
+      : '';
+    const body = book.kind === 'tech' ? need + book.skills.map((id) => this.skillCard(id)).join('') : this.effectCard(book);
+    const head = `<div class="bhead" style="--c:${book.color}">
+              <h3>${book.name}<span class="ktag ${book.kind}">${bookTag(book)}</span><span class="blv">Lv ${lv} / ${max}</span></h3><p>${book.desc}</p>
+              <div class="lvrow"><div class="lvtrack">${track}</div><div class="lvact">${lvAct}</div></div>
+              <div class="lvnext">${nextTxt}</div>
+              ${g.sparesOf(book.id) ? `<div class="lvnext">同じ本の予備が <b>${g.sparesOf(book.id)}冊</b> ある（道具屋で ${sellPrice(book)} G で売れる）</div>` : ''}
+            </div>`;
+    return head + body;
+  }
+
+  // ---------------------------------------------------------------- 装備
+
+  /** 装備の確認（見るだけ。持ち替え・鍛えるのは町の武器防具屋） */
+  showEquipment() {
+    const g = this.game;
+    const d = g.data;
+    const w = weaponById(d.weapon);
+    const a = armorById(d.armor);
+    const wp = g.plusOf(w.id);
+    const ap = g.plusOf(a.id);
+    const plusTxt = (p: number) => `<span class="eplus">鍛冶 +${p} / ${MAX_PLUS}</span>`;
+    const card = (slot: string, icon: string, name: string, plus: number, stat: string, fx: string | undefined, desc: string) => `
+      <div class="eqcard">
+        <div class="eslot">${slot}</div>
+        <div class="sicon">${icon}</div>
+        <div class="sinfo">
+          <div class="sname">${eqName(name, plus)}${plusTxt(plus)}</div>
+          <div class="estat">${stat}</div>
+          ${fx ? `<div class="efx">✨ ${fx}</div>` : ''}
+          <div class="sdesc">${desc}</div>
+        </div>
+      </div>`;
+    const wt = g.weaponType;
+    const now =
+      card('武器', w.icon, w.name, wp, weaponStatText(w, wp), w.effect && WEAPON_EFFECT_TEXT[w.effect], w.desc) +
+      `<div class="wneed ok">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}の技が使える</div>` +
+      card('防具', a.icon, a.name, ap, `防御力 +${armorDef(a, ap)}`, a.effect && ARMOR_EFFECT_TEXT[a.effect], a.desc);
+
+    // パラメタ：合計と、そのうち装備による分
+    const fromEq = (k: Stat) => weaponStat(w, k, wp) + (k === 'def' ? armorDef(a, ap) : 0);
+    const params = STATS.map((k) => {
+      const eq = fromEq(k);
+      return `<div class="eparam"><span class="k">${STAT_ICON[k]} ${STAT_NAME[k]}</span><b>${g.stat(k)}</b><small>${eq > 0 ? `装備 +${eq}` : ''}</small></div>`;
+    }).join('');
+    const cut = Math.round((1 - damageRate(g.stat('def'))) * 100);
+
+    // 持っている装備（いま装備しているものに印をつける）
+    const ownedRow = (icon: string, name: string, plus: number, stat: string, on: boolean) =>
+      `<li class="${on ? 'on' : ''}"><span class="i">${icon}</span><span class="n">${eqName(name, plus)}</span><small>${stat}</small>${on ? '<em>装備中</em>' : ''}</li>`;
+    const ownedW = WEAPONS.filter((x) => d.weapons.includes(x.id))
+      .map((x) => ownedRow(x.icon, x.name, g.plusOf(x.id), weaponStatText(x, g.plusOf(x.id)), x.id === d.weapon))
+      .join('');
+    const ownedA = ARMORS.filter((x) => d.armors.includes(x.id))
+      .map((x) => ownedRow(x.icon, x.name, g.plusOf(x.id), `防御力 +${armorDef(x, g.plusOf(x.id))}`, x.id === d.armor))
+      .join('');
+
+    this.open(
+      'equip',
+      `<div class="panel equip-panel">
+        <div class="phead"><h2>🛡️ 装備</h2><button class="x" data-act="close">✕</button></div>
+        <div class="equip-body">
+          <section>
+            <h4>装備中</h4>
+            ${now}
+            <h4>パラメタ</h4>
+            <div class="eparams">${params}</div>
+            <p class="note">受けるダメージ -${cut}%（防御力 ${g.stat('def')}）</p>
+          </section>
+          <section>
+            <h4>持っている武器（${d.weapons.length}）</h4>
+            <ul class="eqlist">${ownedW}</ul>
+            <h4>持っている防具（${d.armors.length}）</h4>
+            <ul class="eqlist">${ownedA}</ul>
+            <p class="note">装備の持ち替えや鍛冶は、町の武器防具屋でできる。</p>
+          </section>
+        </div>
+      </div>`,
+      (act) => {
+        if (act === 'close') this.close();
+      },
+    );
+  }
+
   // ---------------------------------------------------------------- 本棚
 
   private shelfCard(b: BookDef, carried: boolean, full: boolean): string {
@@ -475,7 +547,9 @@ export class UI {
             .map((id) => {
               const sk = SKILLS[id];
               const l = d.learned.includes(id);
-              return `<span class="sk ${l ? 'on' : ''}" title="${sk.name}（${l ? '覚えている' : `Lv${sk.lv}で覚える`}）">${sk.icon}${sk.name}</span>`;
+              return l
+                ? `<span class="sk on" title="${sk.name}（覚えている）">${sk.icon}${sk.name}</span>`
+                : `<span class="sk" title="Lv${sk.lv}で覚える">❔？？？</span>`;
             })
             .join('')
         : `<span class="sk ${lv >= 1 ? 'on' : ''}">${lv >= 1 ? this.bookEffect(b) : '効果なし（Lv0）'}</span>`;
@@ -839,7 +913,11 @@ export class UI {
           <div class="rlbl">✨ 呪いが解けた！ 本の正体は…</div>
           <div class="srow learned">
             <div class="sicon book" style="--c:${rb.color}">📗</div>
-            <div class="sinfo"><div class="sname">${rb.name}<span class="ktag ${rb.kind}">${bookTag(rb)}</span></div><div class="sdesc">${rb.desc}<br><small>${rb.kind === 'tech' ? '収録' : '効果'}: ${bookSummary(rb)}</small></div></div>
+            <div class="sinfo"><div class="sname">${rb.name}<span class="ktag ${rb.kind}">${bookTag(rb)}</span></div><div class="sdesc">${rb.desc}<br><small>${rb.kind === 'tech' ? '収録' : '効果'}: ${
+              rb.kind === 'tech'
+                ? rb.skills.map((s) => `Lv${SKILLS[s].lv} ${d.learned.includes(s) ? `${SKILLS[s].icon}${SKILLS[s].name}` : '❔？？？'}`).join('・')
+                : bookSummary(rb)
+            }</small></div></div>
           </div>
           <p class="note">${this.revealedSpare ? `すでに持っている本なので<b>予備</b>になった。道具屋で ${sellPrice(rb)} G で売れる。` : 'Lv0から始まる。スキルブック [K] でSPを使ってレベルを上げよう。'}</p>
         </div>`
@@ -894,8 +972,8 @@ export class UI {
         <div class="phead"><h2>🏦 銀行</h2><button class="x" data-act="close">✕</button></div>
         <p class="npc">頭取「いらっしゃいませ。お預かりしたゴールドは、ダンジョンで力尽きても一枚たりとも減りません。冒険の前にぜひどうぞ。」</p>
         <div class="bank-sum">
-          <div class="bcell"><div class="blbl">所持金</div><div class="bval">${d.gold} G</div><div class="bsub">倒れると半分を失う</div></div>
           <div class="bcell safe"><div class="blbl">預金</div><div class="bval">${d.bank} G</div><div class="bsub">倒れても減らない</div></div>
+          <div class="bcell"><div class="blbl">所持金</div><div class="bval">${d.gold} G</div><div class="bsub">倒れると半分を失う</div></div>
         </div>
         ${this.bankMsg ? `<p class="bank-msg">${this.bankMsg}</p>` : ''}
         <div class="bank-ops">
@@ -921,23 +999,7 @@ export class UI {
     );
   }
 
-  // ---------------------------------------------------------------- 宿屋・入口
-
-  showInn() {
-    this.open(
-      'inn',
-      `<div class="panel small-panel">
-        <h2>🛏️ 宿屋</h2>
-        <p class="npc">女将「ようこそ。ひと晩休んでいくかい？ ハンターさんからお代はもらわないよ。」</p>
-        <p class="note">体力・MPが全回復し、冒険の記録をセーブします。</p>
-        <div class="btns"><button data-act="rest">休む</button><button data-act="close" class="sub">やめる</button></div>
-      </div>`,
-      (act) => {
-        if (act === 'rest') this.game.rest();
-        this.close();
-      },
-    );
-  }
+  // ---------------------------------------------------------------- 遺跡の入口
 
   /** 古代遺跡の入口。ランクB になるまではギルドに封鎖されている */
   showEntrance() {

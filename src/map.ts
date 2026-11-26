@@ -15,7 +15,6 @@ export const T = {
   WATER: 7,
   HOUSE: 8,
   SHOP_DOOR: 9,
-  INN_DOOR: 10,
   ROCK: 11,
   ENTRANCE: 12,
   FLOWER: 13,
@@ -28,7 +27,7 @@ export const T = {
   GUILD_DOOR: 19,
 } as const;
 
-const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.INN_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR, T.BANK_DOOR, T.GUILD_DOOR]);
+const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR, T.BANK_DOOR, T.GUILD_DOOR]);
 
 export class TileMap {
   tiles: Uint8Array;
@@ -111,7 +110,7 @@ export interface Label {
 
 /** 町の建物（タイル単位）。見た目は1つの絵としてまとめて描く */
 export interface Building {
-  kind: 'shop' | 'inn' | 'ruin' | 'home' | 'smithy' | 'temple' | 'bank' | 'guild';
+  kind: 'shop' | 'ruin' | 'home' | 'smithy' | 'temple' | 'bank' | 'guild';
   x: number;
   y: number;
   w: number;
@@ -140,9 +139,8 @@ export function buildTown() {
 
   // 道
   rect(11, 5, 1, 4, T.PATH);
-  rect(25, 5, 1, 4, T.PATH);
   rect(18, 5, 1, 3, T.PATH);
-  rect(11, 8, 15, 1, T.PATH);
+  rect(11, 8, 8, 1, T.PATH);
   rect(13, 8, 1, 11, T.PATH);
   rect(5, 14, 8, 1, T.PATH);
   rect(13, 18, 6, 1, T.PATH);
@@ -150,13 +148,13 @@ export function buildTown() {
   rect(19, 18, 9, 1, T.PATH);
   rect(4, 5, 1, 3, T.PATH);
   rect(4, 8, 7, 1, T.PATH);
-  // 銀行への道（わが家の前の道から南へ下り、銀行の正面へ回りこむ）
+  // わが家への道（銀行の前の道から南へ下り、わが家の正面へ回りこむ）
   rect(10, 15, 1, 5, T.PATH);
   rect(5, 20, 6, 1, T.PATH);
 
   // わが家
-  rect(3, 11, 6, 3, T.HOUSE);
-  m.set(5, 13, T.HOME_DOOR);
+  rect(3, 17, 6, 3, T.HOUSE);
+  m.set(5, 19, T.HOME_DOOR);
   // 道具屋
   rect(9, 2, 6, 3, T.HOUSE);
   m.set(11, 4, T.SHOP_DOOR);
@@ -167,14 +165,11 @@ export function buildTown() {
   rect(2, 2, 6, 3, T.HOUSE);
   m.set(4, 4, T.TEMPLE_DOOR);
   // 銀行（お金を預ける）
-  rect(3, 17, 6, 3, T.HOUSE);
-  m.set(5, 19, T.BANK_DOOR);
+  rect(3, 11, 6, 3, T.HOUSE);
+  m.set(5, 13, T.BANK_DOOR);
   // ハンターギルド（ランクの認定・ダンジョンへの出発・昇格試験）
   rect(16, 2, 6, 3, T.HOUSE);
   m.set(18, 4, T.GUILD_DOOR);
-  // 宿屋
-  rect(23, 2, 6, 3, T.HOUSE);
-  m.set(25, 4, T.INN_DOOR);
   // ダンジョン入口 (岩山)
   rect(15, 14, 7, 3, T.ROCK);
   m.set(15, 14, T.GRASS);
@@ -208,26 +203,24 @@ export function buildTown() {
   // 看板の位置は建物の絵（屋根が上へはみ出す）に合わせている
   const labels: Label[] = [
     { x: 12 * TILE, y: 2 * TILE - 52, text: '道具屋' },
-    { x: 26 * TILE, y: 2 * TILE - 52, text: '宿屋' },
     { x: 19 * TILE, y: 2 * TILE - 52, text: 'ハンターギルド' },
     { x: 18.5 * TILE, y: 14 * TILE - 46, text: '古代遺跡' },
-    { x: 6 * TILE, y: 11 * TILE - 52, text: 'わが家' },
+    { x: 6 * TILE, y: 17 * TILE - 52, text: 'わが家' },
     { x: 28 * TILE, y: 15 * TILE - 52, text: '武器防具屋' },
     { x: 5 * TILE, y: 2 * TILE - 52, text: '神殿' },
-    { x: 6 * TILE, y: 17 * TILE - 52, text: '銀行' },
+    { x: 6 * TILE, y: 11 * TILE - 52, text: '銀行' },
   ];
   const buildings: Building[] = [
     { kind: 'shop', x: 9, y: 2, w: 6, h: 3, doorX: 11 },
-    { kind: 'inn', x: 23, y: 2, w: 6, h: 3, doorX: 25 },
     { kind: 'guild', x: 16, y: 2, w: 6, h: 3, doorX: 18 },
     { kind: 'ruin', x: 15, y: 14, w: 7, h: 3, doorX: 18 },
-    { kind: 'home', x: 3, y: 11, w: 6, h: 3, doorX: 5 },
+    { kind: 'home', x: 3, y: 17, w: 6, h: 3, doorX: 5 },
     { kind: 'smithy', x: 25, y: 15, w: 6, h: 3, doorX: 27 },
     { kind: 'temple', x: 2, y: 2, w: 6, h: 3, doorX: 4 },
-    { kind: 'bank', x: 3, y: 17, w: 6, h: 3, doorX: 5 },
+    { kind: 'bank', x: 3, y: 11, w: 6, h: 3, doorX: 5 },
   ];
 
-  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 14), guildFront: center(18, 5), labels, buildings };
+  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 20), guildFront: center(18, 5), labels, buildings };
 }
 
 // ---------------------------------------------------------------- ダンジョン

@@ -537,13 +537,12 @@ function drawHouse(ctx: C, b: Building) {
   const wallTop = bottom - 54;
   const roofTop = top - 42;
   const eave = wallTop + 8;
-  const inn = b.kind === 'inn';
   const home = b.kind === 'home';
   const smithy = b.kind === 'smithy';
   const temple = b.kind === 'temple';
   const bank = b.kind === 'bank';
   const guild = b.kind === 'guild';
-  const warm = inn || home || guild;
+  const warm = home || guild;
   const dx = (b.doorX + 0.5) * TILE;
 
   groundShadow(ctx, (x0 + x1) / 2 + 8, bottom - 2, w / 2 + 14, 12, 0.35);
@@ -640,7 +639,7 @@ function drawHouse(ctx: C, b: Building) {
       ctx.fillRect(wx - 12, wy + 20, 24, 3);
       continue;
     }
-    ctx.fillStyle = inn ? '#2e5a46' : home ? '#3a5a8a' : smithy ? '#34343a' : bank ? '#24443a' : guild ? '#5a2034' : '#7a2a24';
+    ctx.fillStyle = home ? '#3a5a8a' : smithy ? '#34343a' : bank ? '#24443a' : guild ? '#5a2034' : '#7a2a24';
     ctx.fillRect(wx - 16, wy - 1, 5, 18);
     ctx.fillRect(wx + 11, wy - 1, 5, 18);
     ctx.fillStyle = '#5a3a1c';
@@ -696,9 +695,9 @@ function drawHouse(ctx: C, b: Building) {
   ctx.roundRect(dx - 14, dTop - 3, 28, 39, [13, 13, 0, 0]);
   ctx.fill();
   const dg = ctx.createLinearGradient(dx - 11, 0, dx + 11, 0);
-  dg.addColorStop(0, inn ? '#2f5a44' : smithy ? '#3a2a1e' : temple ? '#26346a' : bank ? '#1a3a2e' : guild ? '#4a1a2a' : '#6a3c1c');
-  dg.addColorStop(0.5, inn ? '#4a8064' : smithy ? '#5e4630' : temple ? '#4a62a8' : bank ? '#2e6a50' : guild ? '#7a3048' : '#9a5e30');
-  dg.addColorStop(1, inn ? '#2a4c3a' : smithy ? '#2e2018' : temple ? '#202c5a' : bank ? '#163024' : guild ? '#3a1420' : '#5e341a');
+  dg.addColorStop(0, smithy ? '#3a2a1e' : temple ? '#26346a' : bank ? '#1a3a2e' : guild ? '#4a1a2a' : '#6a3c1c');
+  dg.addColorStop(0.5, smithy ? '#5e4630' : temple ? '#4a62a8' : bank ? '#2e6a50' : guild ? '#7a3048' : '#9a5e30');
+  dg.addColorStop(1, smithy ? '#2e2018' : temple ? '#202c5a' : bank ? '#163024' : guild ? '#3a1420' : '#5e341a');
   ctx.fillStyle = dg;
   ctx.beginPath();
   ctx.roundRect(dx - 11, dTop, 22, 36, [11, 11, 0, 0]);
@@ -811,12 +810,6 @@ function drawHouse(ctx: C, b: Building) {
     ctx.fillStyle = '#ffe080';
     ellipsePath(ctx, sx + 4, sy + 6, 2.2, 2.2);
     ctx.fill();
-  } else if (inn) {
-    ctx.fillStyle = '#f0e0a0';
-    ctx.beginPath();
-    ctx.arc(sx + 4, sy + 6, 3.6, 0.6, TAU - 0.6);
-    ctx.arc(sx + 5.6, sy + 5, 2.8, TAU - 0.9, 0.9, true);
-    ctx.fill();
   } else {
     ctx.fillStyle = '#d84a4a';
     ellipsePath(ctx, sx + 4, sy + 7.5, 3.2, 3.2);
@@ -848,7 +841,7 @@ function drawHouse(ctx: C, b: Building) {
   roofPath.lineTo(x1 - 16, roofTop);
   roofPath.lineTo(x0 + 16, roofTop);
   roofPath.closePath();
-  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : guild ? ['#a8485e', '#6e2438', '#461424'] : bank ? ['#5a9a78', '#2e6a4e', '#1c4634'] : inn ? ['#5a8aa8', '#2c5068', '#1e3a4e'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
+  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : guild ? ['#a8485e', '#6e2438', '#461424'] : bank ? ['#5a9a78', '#2e6a4e', '#1c4634'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
   const rg = ctx.createLinearGradient(0, roofTop, 0, eave);
   rg.addColorStop(0, rc[0]);
   rg.addColorStop(0.6, rc[1]);
@@ -1094,7 +1087,7 @@ function drawHouse(ctx: C, b: Building) {
     ctx.restore();
   }
 
-  // 煙突と煙（宿屋・わが家）
+  // 煙突と煙（わが家・ギルド）
   if (warm) {
     const cx = x1 - 52;
     ctx.fillStyle = '#7a4a3a';
@@ -1287,7 +1280,7 @@ function drawHouseAnim(ctx: C, b: Building, time: number) {
     ctx.fillStyle = '#e8c050';
     ctx.fillRect(fx + 1, fy + 6, 6, 1.4);
   }
-  if (b.kind === 'inn' || b.kind === 'home') {
+  if (b.kind === 'home') {
     const cx = x1 - 52;
     for (let i = 0; i < 4; i++) {
       const k = ((time * 0.35 + i / 4) % 1 + 1) % 1;
