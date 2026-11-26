@@ -541,6 +541,7 @@ function drawHouse(ctx: C, b: Building) {
   const home = b.kind === 'home';
   const smithy = b.kind === 'smithy';
   const temple = b.kind === 'temple';
+  const bank = b.kind === 'bank';
   const warm = inn || home;
   const dx = (b.doorX + 0.5) * TILE;
 
@@ -558,14 +559,14 @@ function drawHouse(ctx: C, b: Building) {
     ctx.stroke();
   }
   const wg = ctx.createLinearGradient(0, wallTop, 0, bottom);
-  wg.addColorStop(0, smithy ? '#8a847c' : temple ? '#d4d2e2' : '#d8c6a0');
-  wg.addColorStop(0.3, smithy ? '#b4aea4' : temple ? '#f8f6ff' : '#f2e6cb');
-  wg.addColorStop(1, smithy ? '#958f86' : temple ? '#c8c4da' : '#ddcba6');
+  wg.addColorStop(0, smithy ? '#8a847c' : temple ? '#d4d2e2' : bank ? '#d6ccb4' : '#d8c6a0');
+  wg.addColorStop(0.3, smithy ? '#b4aea4' : temple ? '#f8f6ff' : bank ? '#f6efdc' : '#f2e6cb');
+  wg.addColorStop(1, smithy ? '#958f86' : temple ? '#c8c4da' : bank ? '#cfc4a8' : '#ddcba6');
   ctx.fillStyle = wg;
   ctx.fillRect(x0 + 4, wallTop, w - 8, bottom - 7 - wallTop);
-  if (smithy) {
-    // 石積みの壁
-    ctx.strokeStyle = 'rgba(50,44,38,0.35)';
+  if (smithy || bank) {
+    // 石積みの壁（銀行は白っぽい切り石）
+    ctx.strokeStyle = bank ? 'rgba(120,100,70,0.28)' : 'rgba(50,44,38,0.35)';
     ctx.lineWidth = 0.7;
     ctx.beginPath();
     for (let y = wallTop + 9, row = 0; y < bottom - 8; y += 8, row++) {
@@ -579,20 +580,20 @@ function drawHouse(ctx: C, b: Building) {
     ctx.stroke();
   }
   // 木の骨組み
-  ctx.fillStyle = smithy ? '#3e342c' : temple ? '#b09a62' : '#6b4a2b';
+  ctx.fillStyle = smithy ? '#3e342c' : temple ? '#b09a62' : bank ? '#a8925a' : '#6b4a2b';
   ctx.fillRect(x0 + 4, wallTop, w - 8, 4);
   ctx.fillRect(x0 + 4, bottom - 10, w - 8, 3);
   const posts = [x0 + 4, x0 + w * 0.34, x0 + w * 0.66, x1 - 8];
   for (const px of posts) {
     if (Math.abs(px - dx) <= 18) continue;
-    if (temple) {
+    if (temple || bank) {
       // 白い石の柱（溝つき）
-      ctx.fillStyle = '#ece8f6';
+      ctx.fillStyle = bank ? '#fbf6e8' : '#ece8f6';
       ctx.fillRect(px - 1, wallTop + 4, 6, bottom - 11 - wallTop);
-      ctx.fillStyle = 'rgba(120,110,150,0.35)';
+      ctx.fillStyle = bank ? 'rgba(150,120,70,0.35)' : 'rgba(120,110,150,0.35)';
       ctx.fillRect(px + 0.8, wallTop + 6, 0.8, bottom - 15 - wallTop);
       ctx.fillRect(px + 2.8, wallTop + 6, 0.8, bottom - 15 - wallTop);
-      ctx.fillStyle = '#b09a62';
+      ctx.fillStyle = bank ? '#c8a448' : '#b09a62';
       ctx.fillRect(px - 2, wallTop + 4, 8, 2);
       ctx.fillRect(px - 2, bottom - 12, 8, 2);
     } else ctx.fillRect(px, wallTop, 4, bottom - 7 - wallTop);
@@ -638,7 +639,7 @@ function drawHouse(ctx: C, b: Building) {
       ctx.fillRect(wx - 12, wy + 20, 24, 3);
       continue;
     }
-    ctx.fillStyle = inn ? '#2e5a46' : home ? '#3a5a8a' : smithy ? '#34343a' : '#7a2a24';
+    ctx.fillStyle = inn ? '#2e5a46' : home ? '#3a5a8a' : smithy ? '#34343a' : bank ? '#24443a' : '#7a2a24';
     ctx.fillRect(wx - 16, wy - 1, 5, 18);
     ctx.fillRect(wx + 11, wy - 1, 5, 18);
     ctx.fillStyle = '#5a3a1c';
@@ -662,10 +663,18 @@ function drawHouse(ctx: C, b: Building) {
     ctx.fillRect(wx - 9, wy + 7.2, 18, 1.6);
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.fillRect(wx - 7, wy + 1.5, 4, 4);
-    // 花台（武器防具屋は石の窓台）
-    ctx.fillStyle = smithy ? '#6e6860' : '#6b4424';
+    if (bank) {
+      // 鉄格子
+      ctx.fillStyle = '#2a2a30';
+      for (const bx of [-5.5, -1, 3.5]) ctx.fillRect(wx + bx, wy - 1, 1.6, 18);
+      ctx.fillRect(wx - 9, wy + 3, 18, 1.4);
+      ctx.fillRect(wx - 9, wy + 12, 18, 1.4);
+    }
+    // 花台（武器防具屋と銀行は石の窓台）
+    const stoneSill = smithy || bank;
+    ctx.fillStyle = smithy ? '#6e6860' : bank ? '#bfb296' : '#6b4424';
     ctx.fillRect(wx - 12, wy + 18, 24, 4);
-    for (let i = 0; i < 6 && !smithy; i++) {
+    for (let i = 0; i < 6 && !stoneSill; i++) {
       ctx.fillStyle = i % 2 ? '#ff6a6a' : '#fff0f0';
       ellipsePath(ctx, wx - 10 + i * 4, wy + 17, 1.8, 1.8);
       ctx.fill();
@@ -686,9 +695,9 @@ function drawHouse(ctx: C, b: Building) {
   ctx.roundRect(dx - 14, dTop - 3, 28, 39, [13, 13, 0, 0]);
   ctx.fill();
   const dg = ctx.createLinearGradient(dx - 11, 0, dx + 11, 0);
-  dg.addColorStop(0, inn ? '#2f5a44' : smithy ? '#3a2a1e' : temple ? '#26346a' : '#6a3c1c');
-  dg.addColorStop(0.5, inn ? '#4a8064' : smithy ? '#5e4630' : temple ? '#4a62a8' : '#9a5e30');
-  dg.addColorStop(1, inn ? '#2a4c3a' : smithy ? '#2e2018' : temple ? '#202c5a' : '#5e341a');
+  dg.addColorStop(0, inn ? '#2f5a44' : smithy ? '#3a2a1e' : temple ? '#26346a' : bank ? '#1a3a2e' : '#6a3c1c');
+  dg.addColorStop(0.5, inn ? '#4a8064' : smithy ? '#5e4630' : temple ? '#4a62a8' : bank ? '#2e6a50' : '#9a5e30');
+  dg.addColorStop(1, inn ? '#2a4c3a' : smithy ? '#2e2018' : temple ? '#202c5a' : bank ? '#163024' : '#5e341a');
   ctx.fillStyle = dg;
   ctx.beginPath();
   ctx.roundRect(dx - 11, dTop, 22, 36, [11, 11, 0, 0]);
@@ -701,11 +710,11 @@ function drawHouse(ctx: C, b: Building) {
     ctx.lineTo(dx + lx, dTop + 36);
     ctx.stroke();
   }
-  if (smithy) {
-    // 鉄の帯
-    ctx.fillStyle = '#2a2a30';
+  if (smithy || bank) {
+    // 鉄の帯（銀行は金の帯）
+    ctx.fillStyle = bank ? '#c8a448' : '#2a2a30';
     for (const by of [dTop + 9, dTop + 26]) ctx.fillRect(dx - 11, by, 22, 2.4);
-    ctx.fillStyle = '#8a8a94';
+    ctx.fillStyle = bank ? '#fff0b0' : '#8a8a94';
     for (const by of [dTop + 10.2, dTop + 27.2]) {
       for (const bx of [-8, 8]) {
         ellipsePath(ctx, dx + bx, by, 0.9, 0.9);
@@ -762,6 +771,20 @@ function drawHouse(ctx: C, b: Building) {
     ctx.moveTo(sx + 8.5, sy + 7.5);
     ctx.lineTo(sx + 5.5, sy + 10.5);
     ctx.stroke();
+  } else if (bank) {
+    // 金貨の看板
+    ctx.fillStyle = '#a07c20';
+    ellipsePath(ctx, sx + 4, sy + 6, 4.4, 4.4);
+    ctx.fill();
+    ctx.fillStyle = '#f0c848';
+    ellipsePath(ctx, sx + 4, sy + 6, 3.6, 3.6);
+    ctx.fill();
+    ctx.strokeStyle = '#a07c20';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.arc(sx + 4, sy + 6, 1.9, -0.4, Math.PI * 1.6);
+    ctx.lineTo(sx + 4.2, sy + 6);
+    ctx.stroke();
   } else if (temple) {
     // 金色の太陽の紋章
     ctx.strokeStyle = '#ffe080';
@@ -813,7 +836,7 @@ function drawHouse(ctx: C, b: Building) {
   roofPath.lineTo(x1 - 16, roofTop);
   roofPath.lineTo(x0 + 16, roofTop);
   roofPath.closePath();
-  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : inn ? ['#5a8aa8', '#2c5068', '#1e3a4e'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
+  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : bank ? ['#5a9a78', '#2e6a4e', '#1c4634'] : inn ? ['#5a8aa8', '#2c5068', '#1e3a4e'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
   const rg = ctx.createLinearGradient(0, roofTop, 0, eave);
   rg.addColorStop(0, rc[0]);
   rg.addColorStop(0.6, rc[1]);
@@ -889,6 +912,44 @@ function drawHouse(ctx: C, b: Building) {
     ctx.fillRect(bx - 14, by - 31, 28, 2.5);
   }
 
+  // 銀行：金の縁どりと、屋根の正面の破風に大きな金貨の紋章
+  if (bank) {
+    ctx.fillStyle = '#d8b850';
+    ctx.fillRect(x0 - 8, eave - 3, w + 16, 1.6);
+    const { x: cx, y: cy } = bankCoin(b);
+    ctx.fillStyle = '#f2ead4';
+    ctx.beginPath();
+    ctx.moveTo(cx - 30, eave - 4);
+    ctx.lineTo(cx + 30, eave - 4);
+    ctx.lineTo(cx, roofTop - 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#c8a448';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.fillStyle = '#7a5a18';
+    ellipsePath(ctx, cx, cy, 10.5, 10.5);
+    ctx.fill();
+    const cg = ctx.createRadialGradient(cx - 3, cy - 3, 1, cx, cy, 10);
+    cg.addColorStop(0, '#fff2a8');
+    cg.addColorStop(0.6, '#f0c040');
+    cg.addColorStop(1, '#b88a20');
+    ctx.fillStyle = cg;
+    ellipsePath(ctx, cx, cy, 9, 9);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(122,90,24,0.8)';
+    ctx.lineWidth = 0.8;
+    ellipsePath(ctx, cx, cy, 6.8, 6.8);
+    ctx.stroke();
+    // 「G」の刻印
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, -0.5, Math.PI * 1.65);
+    ctx.moveTo(cx + 4, cy + 1.2);
+    ctx.lineTo(cx + 0.6, cy + 1.2);
+    ctx.stroke();
+  }
+
   // 武器防具屋：石の煙突から黒い煙と火の粉
   if (smithy) {
     const cx = x0 + 40;
@@ -955,6 +1016,14 @@ function drawHouse(ctx: C, b: Building) {
     ctx.fillStyle = '#5a3428';
     ctx.fillRect(cx - 1.5, roofTop - 14, 14, 4);
   }
+}
+
+/** 銀行の屋根の金貨の紋章の中心 */
+function bankCoin(b: Building): { x: number; y: number } {
+  const bottom = (b.y + b.h) * TILE;
+  const roofTop = b.y * TILE - 42;
+  const eave = bottom - 54 + 8;
+  return { x: (b.x + b.w / 2) * TILE, y: (roofTop + eave) / 2 + 4 };
 }
 
 /** 建物の動く部分：ステンドグラスのきらめき・鐘・宝珠・光の粒・炉の火・煙・火の粉・鍛冶屋の親方 */
@@ -1042,6 +1111,40 @@ function drawHouseAnim(ctx: C, b: Building, time: number) {
     ctx.fillStyle = '#ffb040';
     ctx.fillRect(ax - 2, ay - 18.6, 8, 1.6);
     drawSmith(ctx, ax + 22, ay, time, ax + 2, ay - 18);
+  }
+  if (b.kind === 'bank') {
+    // 屋根の金貨を光がさっと横切り、ときどききらめく
+    const { x: cx, y: cy } = bankCoin(b);
+    const k = (time % 4) / 4;
+    if (k < 0.3) {
+      const sx = cx - 12 + (k / 0.3) * 24;
+      ctx.save();
+      ellipsePath(ctx, cx, cy, 9, 9);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255,255,240,0.65)';
+      ctx.beginPath();
+      ctx.moveTo(sx - 2, cy - 10);
+      ctx.lineTo(sx + 2, cy - 10);
+      ctx.lineTo(sx - 2, cy + 10);
+      ctx.lineTo(sx - 6, cy + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+    const tw = Math.max(0, Math.sin(time * 2.3)) ** 6;
+    if (tw > 0.05) {
+      const px = cx + 6;
+      const py = cy - 6;
+      ctx.strokeStyle = `rgba(255,255,220,${tw})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px - 4 * tw, py);
+      ctx.lineTo(px + 4 * tw, py);
+      ctx.moveTo(px, py - 4 * tw);
+      ctx.lineTo(px, py + 4 * tw);
+      ctx.stroke();
+    }
+    glow(ctx, cx, cy, 16, '#ffd860', 0.18 + Math.sin(time * 2) * 0.06);
   }
   if (b.kind === 'inn' || b.kind === 'home') {
     const cx = x1 - 52;

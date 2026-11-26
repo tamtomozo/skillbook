@@ -23,9 +23,10 @@ export const T = {
   HOME_EXIT: 15,
   SMITHY_DOOR: 16,
   TEMPLE_DOOR: 17,
+  BANK_DOOR: 18,
 } as const;
 
-const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.INN_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR]);
+const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.INN_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR, T.BANK_DOOR]);
 
 export const FINAL_FLOOR = 10;
 
@@ -110,7 +111,7 @@ export interface Label {
 
 /** 町の建物（タイル単位）。見た目は1つの絵としてまとめて描く */
 export interface Building {
-  kind: 'shop' | 'inn' | 'ruin' | 'home' | 'smithy' | 'temple';
+  kind: 'shop' | 'inn' | 'ruin' | 'home' | 'smithy' | 'temple' | 'bank';
   x: number;
   y: number;
   w: number;
@@ -142,13 +143,15 @@ export function buildTown() {
   rect(22, 5, 1, 4, T.PATH);
   rect(11, 8, 12, 1, T.PATH);
   rect(13, 8, 1, 11, T.PATH);
-  rect(5, 14, 1, 2, T.PATH);
-  rect(5, 15, 8, 1, T.PATH);
+  rect(5, 14, 8, 1, T.PATH);
   rect(13, 18, 6, 1, T.PATH);
   rect(18, 17, 1, 2, T.PATH);
   rect(19, 18, 9, 1, T.PATH);
   rect(4, 5, 1, 3, T.PATH);
   rect(4, 8, 7, 1, T.PATH);
+  // 銀行への道（わが家の前の道から南へ下り、銀行の正面へ回りこむ）
+  rect(10, 15, 1, 5, T.PATH);
+  rect(5, 20, 6, 1, T.PATH);
 
   // わが家
   rect(3, 11, 6, 3, T.HOUSE);
@@ -162,6 +165,9 @@ export function buildTown() {
   // 神殿（呪われた本を浄化する）
   rect(2, 2, 6, 3, T.HOUSE);
   m.set(4, 4, T.TEMPLE_DOOR);
+  // 銀行（お金を預ける）
+  rect(3, 17, 6, 3, T.HOUSE);
+  m.set(5, 19, T.BANK_DOOR);
   // 宿屋
   rect(20, 2, 6, 3, T.HOUSE);
   m.set(22, 4, T.INN_DOOR);
@@ -203,6 +209,7 @@ export function buildTown() {
     { x: 6 * TILE, y: 11 * TILE - 52, text: 'わが家' },
     { x: 28 * TILE, y: 15 * TILE - 52, text: '武器防具屋' },
     { x: 5 * TILE, y: 2 * TILE - 52, text: '神殿' },
+    { x: 6 * TILE, y: 17 * TILE - 52, text: '銀行' },
   ];
   const buildings: Building[] = [
     { kind: 'shop', x: 9, y: 2, w: 6, h: 3, doorX: 11 },
@@ -211,6 +218,7 @@ export function buildTown() {
     { kind: 'home', x: 3, y: 11, w: 6, h: 3, doorX: 5 },
     { kind: 'smithy', x: 25, y: 15, w: 6, h: 3, doorX: 27 },
     { kind: 'temple', x: 2, y: 2, w: 6, h: 3, doorX: 4 },
+    { kind: 'bank', x: 3, y: 17, w: 6, h: 3, doorX: 5 },
   ];
 
   return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 14), labels, buildings };

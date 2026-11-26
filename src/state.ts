@@ -16,6 +16,8 @@ export interface CursedBook {
 export interface SaveData {
   ver: number;
   gold: number;
+  /** 銀行に預けているゴールド。倒れても減らない */
+  bank: number;
   /** 未使用の経験値 (SPに変換できる) */
   exp: number;
   sp: number;
@@ -62,6 +64,7 @@ export function newSave(): SaveData {
   return {
     ver: SAVE_VER,
     gold: 100,
+    bank: 0,
     exp: 0,
     sp: 3,
     spBought: 0,
@@ -87,6 +90,14 @@ export function newSave(): SaveData {
   };
 }
 
+/** 銀行の利息：階段を1つ降りるたびに預金の BANK_RATE（1回あたり BANK_INTEREST_CAP G まで） */
+export const BANK_RATE = 0.02;
+export const BANK_INTEREST_CAP = 200;
+
+export function bankInterest(bank: number): number {
+  return Math.min(BANK_INTEREST_CAP, Math.floor(bank * BANK_RATE));
+}
+
 /** n個目のSPを得るのに必要なEXP */
 export function spCost(n: number): number {
   return 25 + 12 * n;
@@ -108,6 +119,7 @@ export function loadGame(): SaveData | null {
     if (!s) return null;
     const raw = JSON.parse(s) as Partial<SaveData>;
     const d = { ...newSave(), ...raw };
+    d.bank = Math.max(0, Math.floor(Number(d.bank) || 0));
     if ((raw.ver ?? 1) < SAVE_VER) migrateV1(d, raw);
     migrateCursed(d, raw);
     d.books = d.books.filter(isBook);

@@ -1407,3 +1407,76 @@ button.danger {
   border-color: #6a1a14;
   color: #fff;
 }
+
+/* 銀行 */
+.bank-panel {
+  width: 520px;
+}
+.bank-panel .phead .x {
+  margin-left: auto;
+}
+.bank-panel .phead h2 {
+  color: #ffe8a0;
+}
+.bank-sum {
+  display: flex;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+.bank-sum .bcell {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(176, 138, 74, 0.5);
+  background: rgba(0, 0, 0, 0.22);
+  text-align: center;
+}
+.bank-sum .bcell.safe {
+  border-color: #5aa880;
+  background: radial-gradient(ellipse at top, rgba(90, 200, 140, 0.16), rgba(0, 0, 0, 0.22));
+}
+.bank-sum .blbl {
+  font-size: 13px;
+  color: #c8b89a;
+}
+.bank-sum .bval {
+  font-size: 24px;
+  color: #ffd84a;
+  margin: 2px 0;
+}
+.bank-sum .bsub {
+  font-size: 11px;
+  color: #a8987a;
+}
+.bank-sum .safe .bsub {
+  color: #90d8b0;
+}
+.bank-msg {
+  margin: 6px 0 0;
+  text-align: center;
+  color: #fff4c0;
+  animation: reveal 0.4s ease-out;
+}
+.bank-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bank-ops h4 {
+  margin: 10px 0 6px;
+  font-weight: normal;
+  color: #ffd88a;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.4);
+}
+.bank-ops .bbtns {
+  display: flex;
+  gap: 8px;
+}
+.bank-ops .bbtns button {
+  flex: 1;
+  line-height: 1.25;
+}
+.bank-panel .note b {
+  color: #ffd84a;
+  font-weight: normal;
+}

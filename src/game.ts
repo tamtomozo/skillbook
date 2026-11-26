@@ -14,7 +14,7 @@ import {
 } from './entities';
 import { ARMORS, MAX_PLUS, WEAPONS, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, matDropRate, matOfEnemy, oreById, rollOre, weaponById, weaponStat, type ArmorEffect, type Recipe, type WeaponEffect, type WeaponType } from './equipment';
 import { BOOKS, CURSE_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, purifyPrice, type BookDef, type Stat } from './skills';
-import { HOTBAR_SIZE, MAX_CARRY, loadGame, newSave, saveGame, spCost, type SaveData } from './state';
+import { HOTBAR_SIZE, MAX_CARRY, bankInterest, loadGame, newSave, saveGame, spCost, type SaveData } from './state';
 import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
 import { Terrain, type Light, type Sortable, type View } from './terrain';
 import { UI } from './ui';
@@ -530,12 +530,46 @@ export class Game {
   }
 
   private die() {
+    // 銀行に預けたお金は減らない
     const lost = Math.floor(this.data.gold / 2);
     this.data.gold -= lost;
     this.player.hp = MAX_HP;
     this.player.mp = MAX_MP;
     this.goTown(true);
     this.ui.showDeath(lost);
+  }
+
+  /** 階段を降りる。銀行の預金に利息がつく */
+  private descend() {
+    const d = this.data;
+    const interest = bankInterest(d.bank);
+    if (interest > 0) {
+      d.bank += interest;
+      this.ui.log(`銀行の預金に利息 ${interest} G がついた。（預金 ${d.bank} G）`, '#ffd84a');
+    }
+    this.enterDungeon(this.floor + 1);
+  }
+
+  /** 銀行にお金を預ける。預けた額を返す */
+  deposit(amount: number): number {
+    const d = this.data;
+    const n = Math.min(Math.floor(amount), d.gold);
+    if (n <= 0) return 0;
+    d.gold -= n;
+    d.bank += n;
+    saveGame(d);
+    return n;
+  }
+
+  /** 銀行からお金を引き出す。引き出した額を返す */
+  withdraw(amount: number): number {
+    const d = this.data;
+    const n = Math.min(Math.floor(amount), d.bank);
+    if (n <= 0) return 0;
+    d.bank -= n;
+    d.gold += n;
+    saveGame(d);
+    return n;
   }
 
   // ================================================================ UIから呼ばれる操作
@@ -1752,10 +1786,12 @@ export class Game {
             return { label: '宿屋に入る', act: () => this.ui.showInn() };
           case T.TEMPLE_DOOR:
             return { label: '神殿に入る', act: () => this.ui.showTemple() };
+          case T.BANK_DOOR:
+            return { label: '銀行に入る', act: () => this.ui.showBank() };
           case T.ENTRANCE:
             return { label: '遺跡に入る', act: () => this.ui.showEntrance() };
           case T.STAIRS_DOWN:
-            return { label: '階段を降りる', act: () => this.enterDungeon(this.floor + 1) };
+            return { label: '階段を降りる', act: () => this.descend() };
           case T.STAIRS_UP:
             return { label: '町へ戻る', act: () => this.goTown(true) };
         }

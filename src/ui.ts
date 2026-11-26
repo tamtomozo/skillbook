@@ -3,13 +3,13 @@ import type { Input } from './input';
 import { MAX_HP, MAX_MP } from './constants';
 import { FINAL_FLOOR } from './map';
 import { BOOKS, BOOK_KIND_NAME, CURSED_NAME, CURSE_COLOR, CURSE_POWER, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, pinchValueText, lvUpCost, pinchText, purifyPrice, sellPrice, spSpent, type BookKind, type Stat } from './skills';
-import { HOTBAR_SIZE, MAX_CARRY, hasSave, spCost, type CursedBook } from './state';
+import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type CursedBook } from './state';
 import type { BookDef } from './skills';
 import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStatText, type Recipe } from './equipment';
 
 type SmithyTab = 'shop' | 'forge' | 'craft' | 'sell';
 
-type ModalKind = 'title' | 'book' | 'shop' | 'inn' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple';
+type ModalKind = 'title' | 'book' | 'shop' | 'inn' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple' | 'bank';
 
 const CONTROLS = `
 <table class="ctrl">
@@ -260,6 +260,7 @@ export class UI {
           <li><b>武器防具屋</b>では武器（剣・弓・杖・盾）と鎧を売っている。剣・弓は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、弓なら矢、杖なら魔力の弾、盾なら盾で殴る。深い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。鉱石は遺跡の壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
           <li>魔物は倒すと、ときどき<b>素材</b>（スライムゼリー・コウモリの翼・ゴブリンの牙など）を落とす。武器防具屋の<b>装備作成</b>タブで、素材と鉱石から<b>店では買えない特別な武器と防具</b>を作れる。作った装備には追加効果がある。</li>
           <li>宿屋で休むと全回復＆セーブ。倒れると所持金の半分を失って町へ戻される。</li>
+          <li><b>銀行</b>に預けたゴールドは、倒れても減らない。遺跡で階段を降りるたびに少し利息もつく。買い物をするときは引き出そう。</li>
         </ul>
         <div class="btns"><button data-act="close">閉じる</button></div>
       </div>`,
@@ -867,6 +868,53 @@ export class UI {
     );
   }
 
+  // ---------------------------------------------------------------- 銀行
+
+  /** 銀行の窓口でのやりとり（直前に預けた／引き出した額） */
+  private bankMsg = '';
+
+  showBank() {
+    const g = this.game;
+    const d = g.data;
+    const amounts = [100, 1000];
+    const btn = (act: string, n: number, have: number, label: string) =>
+      `<button data-act="${act}" data-arg="${n}" ${have > 0 ? '' : 'disabled'}>${label}</button>`;
+    const row = (act: 'deposit' | 'withdraw', have: number) =>
+      amounts.map((n) => btn(act, n, have >= n ? 1 : 0, `${n} G`)).join('') + btn(act, Infinity, have, `全部<br><small>${have} G</small>`);
+    const next = bankInterest(d.bank);
+    this.open(
+      'bank',
+      `<div class="panel bank-panel">
+        <div class="phead"><h2>🏦 銀行</h2><button class="x" data-act="close">✕</button></div>
+        <p class="npc">頭取「いらっしゃいませ。お預かりしたゴールドは、遺跡で力尽きても一枚たりとも減りません。冒険の前にぜひどうぞ。」</p>
+        <div class="bank-sum">
+          <div class="bcell"><div class="blbl">所持金</div><div class="bval">${d.gold} G</div><div class="bsub">倒れると半分を失う</div></div>
+          <div class="bcell safe"><div class="blbl">預金</div><div class="bval">${d.bank} G</div><div class="bsub">倒れても減らない</div></div>
+        </div>
+        ${this.bankMsg ? `<p class="bank-msg">${this.bankMsg}</p>` : ''}
+        <div class="bank-ops">
+          <div class="bop"><h4>預ける</h4><div class="bbtns">${row('deposit', d.gold)}</div></div>
+          <div class="bop"><h4>引き出す</h4><div class="bbtns">${row('withdraw', d.bank)}</div></div>
+        </div>
+        <p class="note">利息：遺跡で階段を1つ降りるたびに、預金の ${Math.round(BANK_RATE * 100)}%（1回 ${BANK_INTEREST_CAP} G まで）がつく。${next > 0 ? `いまの預金なら 1回 <b>${next} G</b>。` : ''}<br>買い物は所持金でしかできない。手数料はかからない。</p>
+      </div>`,
+      (act, arg) => {
+        if (act === 'close') {
+          this.bankMsg = '';
+          return this.close();
+        }
+        if (act === 'deposit') {
+          const n = g.deposit(Number(arg));
+          if (n > 0) this.bankMsg = `${n} G をお預かりしました。`;
+        } else if (act === 'withdraw') {
+          const n = g.withdraw(Number(arg));
+          if (n > 0) this.bankMsg = `${n} G をお返しします。`;
+        }
+        this.showBank();
+      },
+    );
+  }
+
   // ---------------------------------------------------------------- 宿屋・入口
 
   showInn() {
@@ -911,7 +959,7 @@ export class UI {
       `<div class="panel small-panel death">
         <h2>💀 力尽きた…</h2>
         <p>通りがかった冒険者に助けられ、町へ運ばれた。</p>
-        <p class="note">所持金 <b>${lost} G</b> を失った。（経験値・スキルは失われない）</p>
+        <p class="note">所持金 <b>${lost} G</b> を失った。（経験値・スキル・銀行の預金は失われない）</p>
         <div class="btns"><button data-act="ok">立ち上がる</button></div>
       </div>`,
       () => this.close(),
