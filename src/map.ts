@@ -1,6 +1,7 @@
 import { TILE } from './constants';
 import { RNG } from './rng';
 import { ENEMIES, enemyDef, type Chest, type ChestContent, type EnemyDef, type Vein } from './entities';
+import { bossEnemyDef, type BossDef } from './dungeons';
 import { rollOre } from './equipment';
 
 export const T = {
@@ -24,11 +25,10 @@ export const T = {
   SMITHY_DOOR: 16,
   TEMPLE_DOOR: 17,
   BANK_DOOR: 18,
+  GUILD_DOOR: 19,
 } as const;
 
-const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.INN_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR, T.BANK_DOOR]);
-
-export const FINAL_FLOOR = 10;
+const SOLID = new Set<number>([T.WALL, T.TREE, T.WATER, T.HOUSE, T.SHOP_DOOR, T.INN_DOOR, T.ROCK, T.ENTRANCE, T.HOME_DOOR, T.SMITHY_DOOR, T.TEMPLE_DOOR, T.BANK_DOOR, T.GUILD_DOOR]);
 
 export class TileMap {
   tiles: Uint8Array;
@@ -111,7 +111,7 @@ export interface Label {
 
 /** 町の建物（タイル単位）。見た目は1つの絵としてまとめて描く */
 export interface Building {
-  kind: 'shop' | 'inn' | 'ruin' | 'home' | 'smithy' | 'temple' | 'bank';
+  kind: 'shop' | 'inn' | 'ruin' | 'home' | 'smithy' | 'temple' | 'bank' | 'guild';
   x: number;
   y: number;
   w: number;
@@ -140,8 +140,9 @@ export function buildTown() {
 
   // 道
   rect(11, 5, 1, 4, T.PATH);
-  rect(22, 5, 1, 4, T.PATH);
-  rect(11, 8, 12, 1, T.PATH);
+  rect(25, 5, 1, 4, T.PATH);
+  rect(18, 5, 1, 3, T.PATH);
+  rect(11, 8, 15, 1, T.PATH);
   rect(13, 8, 1, 11, T.PATH);
   rect(5, 14, 8, 1, T.PATH);
   rect(13, 18, 6, 1, T.PATH);
@@ -168,9 +169,12 @@ export function buildTown() {
   // 銀行（お金を預ける）
   rect(3, 17, 6, 3, T.HOUSE);
   m.set(5, 19, T.BANK_DOOR);
+  // ハンターギルド（ランクの認定・ダンジョンへの出発・昇格試験）
+  rect(16, 2, 6, 3, T.HOUSE);
+  m.set(18, 4, T.GUILD_DOOR);
   // 宿屋
-  rect(20, 2, 6, 3, T.HOUSE);
-  m.set(22, 4, T.INN_DOOR);
+  rect(23, 2, 6, 3, T.HOUSE);
+  m.set(25, 4, T.INN_DOOR);
   // ダンジョン入口 (岩山)
   rect(15, 14, 7, 3, T.ROCK);
   m.set(15, 14, T.GRASS);
@@ -204,7 +208,8 @@ export function buildTown() {
   // 看板の位置は建物の絵（屋根が上へはみ出す）に合わせている
   const labels: Label[] = [
     { x: 12 * TILE, y: 2 * TILE - 52, text: '道具屋' },
-    { x: 23 * TILE, y: 2 * TILE - 52, text: '宿屋' },
+    { x: 26 * TILE, y: 2 * TILE - 52, text: '宿屋' },
+    { x: 19 * TILE, y: 2 * TILE - 52, text: 'ハンターギルド' },
     { x: 18.5 * TILE, y: 14 * TILE - 46, text: '古代遺跡' },
     { x: 6 * TILE, y: 11 * TILE - 52, text: 'わが家' },
     { x: 28 * TILE, y: 15 * TILE - 52, text: '武器防具屋' },
@@ -213,7 +218,8 @@ export function buildTown() {
   ];
   const buildings: Building[] = [
     { kind: 'shop', x: 9, y: 2, w: 6, h: 3, doorX: 11 },
-    { kind: 'inn', x: 20, y: 2, w: 6, h: 3, doorX: 22 },
+    { kind: 'inn', x: 23, y: 2, w: 6, h: 3, doorX: 25 },
+    { kind: 'guild', x: 16, y: 2, w: 6, h: 3, doorX: 18 },
     { kind: 'ruin', x: 15, y: 14, w: 7, h: 3, doorX: 18 },
     { kind: 'home', x: 3, y: 11, w: 6, h: 3, doorX: 5 },
     { kind: 'smithy', x: 25, y: 15, w: 6, h: 3, doorX: 27 },
@@ -221,7 +227,7 @@ export function buildTown() {
     { kind: 'bank', x: 3, y: 17, w: 6, h: 3, doorX: 5 },
   ];
 
-  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 14), labels, buildings };
+  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 14), guildFront: center(18, 5), labels, buildings };
 }
 
 // ---------------------------------------------------------------- ダンジョン
@@ -249,7 +255,11 @@ export interface DungeonResult {
   spawns: Spawn[];
 }
 
-export function generateDungeon(floor: number, eligibleBooks: string[]): DungeonResult {
+/** 階の最後の部屋に置くもの。stairs: 下り階段 / treasure: 秘宝の箱 / conquer: 踏破の宝箱と帰り道 */
+export type FloorGoal = { kind: 'stairs' } | { kind: 'treasure' } | { kind: 'conquer'; gold: number };
+
+/** floor: その階の危険度（敵・宝箱・鉱石・罠の強さが決まる） */
+export function generateDungeon(floor: number, eligibleBooks: string[], goal: FloorGoal = { kind: 'stairs' }): DungeonResult {
   const rng = new RNG((Date.now() ^ Math.imul(floor, 7919)) >>> 0);
   const W = 56;
   const H = 42;
@@ -338,9 +348,16 @@ export function generateDungeon(floor: number, eligibleBooks: string[]): Dungeon
     used.add(m.key(tx, ty));
   };
 
-  const isFinal = floor >= FINAL_FLOOR;
+  const isFinal = goal.kind === 'treasure';
   if (isFinal) {
     addChest(goalRoom.cx, goalRoom.cy, false, { kind: 'treasure' }, true);
+  } else if (goal.kind === 'conquer') {
+    // 踏破の宝箱と、そのそばに町へ戻る階段
+    addChest(goalRoom.cx, goalRoom.cy, true, { kind: 'conquer', gold: goal.gold, ore: rollOre(floor, rng.next()).id, ores: 3 });
+    m.set(goalRoom.cx, goalRoom.cy + 2, T.STAIRS_UP);
+    used.add(m.key(goalRoom.cx, goalRoom.cy + 1));
+    used.add(m.key(goalRoom.cx, goalRoom.cy + 2));
+    used.add(m.key(goalRoom.cx, goalRoom.cy + 3));
   } else {
     m.set(goalRoom.cx, goalRoom.cy, T.STAIRS_DOWN);
     used.add(m.key(goalRoom.cx, goalRoom.cy));
@@ -422,6 +439,40 @@ export function generateDungeon(floor: number, eligibleBooks: string[]): Dungeon
   }
 
   return { map: m, start: center(startRoom.cx, startRoom.cy + 1), chests, veins, spawns };
+}
+
+/**
+ * 昇格試験のボスの間。奥にボスと手下、手前に町へ戻る階段がある。
+ * （ボスと手下の強さは Enemy を作るときに危険度で決まる）
+ */
+export function generateArena(boss: BossDef): DungeonResult {
+  const W = 26;
+  const H = 20;
+  const m = new TileMap(W, H, T.WALL);
+  const x0 = 3;
+  const y0 = 3;
+  const x1 = W - 4;
+  const y1 = H - 3;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) m.set(x, y, T.FLOOR);
+  // 身を隠せる柱
+  for (const [x, y] of [
+    [7, 7],
+    [18, 7],
+    [7, 12],
+    [18, 12],
+  ]) {
+    m.set(x, y, T.WALL);
+    m.set(x + 1, y, T.WALL);
+  }
+  const cx = Math.floor(W / 2);
+  m.set(cx, y1 - 1, T.STAIRS_UP);
+  m.explored.fill(1);
+  const spawns: Spawn[] = [{ ...center(cx, y0 + 2), def: bossEnemyDef(boss) }];
+  boss.minions.forEach((id, i) => {
+    const dx = (i % 2 ? 1 : -1) * (3 + Math.floor(i / 2) * 2);
+    spawns.push({ ...center(cx + dx, y0 + 3 + (i % 2)), def: enemyDef(id) });
+  });
+  return { map: m, start: center(cx, y1 - 2), chests: [], veins: [], spawns };
 }
 
 // ---------------------------------------------------------------- わが家（室内）

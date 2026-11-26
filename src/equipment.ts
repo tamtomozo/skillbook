@@ -66,7 +66,7 @@ export interface WeaponDef {
   /** 鍛冶で +1 するごとに主なパラメタ（WEAPON_MAIN）が増える量 */
   up: number;
   price: number;
-  /** この階に到達すると入荷 */
+  /** この危険度の階に到達すると入荷 */
   minFloor: number;
   icon: string;
   desc: string;
@@ -105,7 +105,7 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'woodshield', name: '木の盾', type: 'shield', atk: 2, def: 4, up: 1, price: 140, minFloor: 0, icon: '🪵', desc: '鉄の縁で補強した丸い木の盾。殴ってもそこそこ痛い。' },
   { id: 'steelshield', name: '鋼の大盾', type: 'shield', atk: 5, def: 10, up: 2, price: 500, minFloor: 3, icon: '🛡️', desc: '分厚い鋼を打ち出した大きな盾。' },
   { id: 'dragonshield', name: '竜鱗の盾', type: 'shield', atk: 9, def: 18, up: 3, price: 1300, minFloor: 6, icon: '🐲', desc: '竜の鱗を張り合わせた、炎をも弾く盾。' },
-  // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor はレシピを教えてもらえる階）
+  // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor はレシピを教えてもらえる危険度）
   { id: 'vampblade', name: '吸血の剣', type: 'sword', atk: 11, up: 2, price: 900, minFloor: 3, icon: '🩸', desc: 'コウモリの翼を鍔に巻いた紅い剣。斬るたびに命を吸う。', effect: 'drain', craft: { gold: 300, ores: { iron: 4 }, mats: { wing: 6, bone: 3 } } },
   { id: 'bonebow', name: '白骨の弓', type: 'bow', atk: 10, up: 2, price: 880, minFloor: 3, icon: '🦴', desc: '古い骨を削り、牙の矢じりを添えた弓。矢が敵を突き抜ける。', effect: 'pierce', craft: { gold: 300, ores: { iron: 3 }, mats: { bone: 6, fang: 4 } } },
   { id: 'soulstaff', name: '霊魂の杖', type: 'staff', atk: 0, mag: 14, up: 2, price: 950, minFloor: 4, icon: '👻', desc: '霊気の結晶を閉じこめた杖。倒した敵の魂を魔力に変える。', effect: 'soul', craft: { gold: 350, ores: { silver: 2 }, mats: { ecto: 5, jelly: 6 } } },
@@ -117,7 +117,7 @@ export const ARMORS: ArmorDef[] = [
   { id: 'leather', name: '革の鎧', def: 6, up: 1, price: 150, minFloor: 0, icon: '🦺', desc: 'なめし革を重ねた軽い鎧。' },
   { id: 'chain', name: '鎖かたびら', def: 12, up: 2, price: 480, minFloor: 3, icon: '⛓️', desc: '細い鉄の輪を編んだ鎧。斬撃に強い。' },
   { id: 'mithrilmail', name: 'ミスリルの鎧', def: 20, up: 3, price: 1300, minFloor: 6, icon: '🛡️', desc: '魔法銀で編まれた、羽のように軽い鎧。' },
-  // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor は作り方を教えてもらえる階）
+  // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor は作り方を教えてもらえる危険度）
   { id: 'wingcloak', name: '夜翼の外套', def: 8, up: 1, price: 600, minFloor: 2, icon: '🦇', desc: 'コウモリの翼を縫い合わせた黒い外套。風のように身が軽くなる。', effect: 'swift', craft: { gold: 250, ores: { iron: 3 }, mats: { wing: 5, jelly: 4 } } },
   { id: 'bonemail', name: '骸骨の鎧', def: 14, up: 2, price: 850, minFloor: 3, icon: '💀', desc: '古い骨を鉄の鋲で留めた鎧。倒した敵の生気を吸いとる。', effect: 'vigor', craft: { gold: 350, ores: { iron: 4 }, mats: { bone: 6, fang: 3 } } },
   { id: 'spiritrobe', name: '霊布の衣', def: 12, up: 2, price: 900, minFloor: 4, icon: '🫧', desc: '霊気の結晶を織りこんだ淡く光る衣。飛んでくる魔弾をやわらげる。', effect: 'ward', craft: { gold: 400, ores: { silver: 2 }, mats: { ecto: 6, jelly: 5 } } },
@@ -189,7 +189,7 @@ export interface OreDef {
   icon: string;
   /** 結晶の色（明・暗） */
   color: [string, string];
-  /** この階から掘れる */
+  /** この危険度の階から掘れる */
   minFloor: number;
 }
 
@@ -245,7 +245,7 @@ export function matDropRate(enemyId: string): number {
   return enemyId === 'golem' ? 0.5 : 0.22;
 }
 
-/** その階で見つかる鉱石をランダムに選ぶ（深いほど上位の鉱石が出やすい） */
+/** その危険度の階で見つかる鉱石をランダムに選ぶ（危険度が高いほど上位の鉱石が出やすい） */
 export function rollOre(floor: number, r: number): OreDef {
   const pool = ORES.filter((o) => o.minFloor <= floor);
   if (pool.length === 0) return ORES[0];

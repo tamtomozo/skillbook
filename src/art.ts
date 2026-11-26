@@ -1232,6 +1232,7 @@ export function drawEnemy(ctx: C, e: Enemy, time: number) {
   const moving = e.stun <= 0 && (e.aggro || e.wx !== 0 || e.wy !== 0);
   ctx.save();
   ctx.translate(e.x, e.y + e.h / 2);
+  if (e.def.scale) ctx.scale(e.def.scale, e.def.scale);
   if (e.dir !== 'side') {
     drawEnemyFrontBack(ctx, e, time, moving, e.dir === 'up');
     ctx.restore();

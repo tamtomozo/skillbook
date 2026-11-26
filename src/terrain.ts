@@ -542,7 +542,8 @@ function drawHouse(ctx: C, b: Building) {
   const smithy = b.kind === 'smithy';
   const temple = b.kind === 'temple';
   const bank = b.kind === 'bank';
-  const warm = inn || home;
+  const guild = b.kind === 'guild';
+  const warm = inn || home || guild;
   const dx = (b.doorX + 0.5) * TILE;
 
   groundShadow(ctx, (x0 + x1) / 2 + 8, bottom - 2, w / 2 + 14, 12, 0.35);
@@ -559,9 +560,9 @@ function drawHouse(ctx: C, b: Building) {
     ctx.stroke();
   }
   const wg = ctx.createLinearGradient(0, wallTop, 0, bottom);
-  wg.addColorStop(0, smithy ? '#8a847c' : temple ? '#d4d2e2' : bank ? '#d6ccb4' : '#d8c6a0');
-  wg.addColorStop(0.3, smithy ? '#b4aea4' : temple ? '#f8f6ff' : bank ? '#f6efdc' : '#f2e6cb');
-  wg.addColorStop(1, smithy ? '#958f86' : temple ? '#c8c4da' : bank ? '#cfc4a8' : '#ddcba6');
+  wg.addColorStop(0, smithy ? '#8a847c' : temple ? '#d4d2e2' : bank ? '#d6ccb4' : guild ? '#b8a284' : '#d8c6a0');
+  wg.addColorStop(0.3, smithy ? '#b4aea4' : temple ? '#f8f6ff' : bank ? '#f6efdc' : guild ? '#dcc8a4' : '#f2e6cb');
+  wg.addColorStop(1, smithy ? '#958f86' : temple ? '#c8c4da' : bank ? '#cfc4a8' : guild ? '#b09a7a' : '#ddcba6');
   ctx.fillStyle = wg;
   ctx.fillRect(x0 + 4, wallTop, w - 8, bottom - 7 - wallTop);
   if (smithy || bank) {
@@ -580,7 +581,7 @@ function drawHouse(ctx: C, b: Building) {
     ctx.stroke();
   }
   // 木の骨組み
-  ctx.fillStyle = smithy ? '#3e342c' : temple ? '#b09a62' : bank ? '#a8925a' : '#6b4a2b';
+  ctx.fillStyle = smithy ? '#3e342c' : temple ? '#b09a62' : bank ? '#a8925a' : guild ? '#3a2418' : '#6b4a2b';
   ctx.fillRect(x0 + 4, wallTop, w - 8, 4);
   ctx.fillRect(x0 + 4, bottom - 10, w - 8, 3);
   const posts = [x0 + 4, x0 + w * 0.34, x0 + w * 0.66, x1 - 8];
@@ -639,7 +640,7 @@ function drawHouse(ctx: C, b: Building) {
       ctx.fillRect(wx - 12, wy + 20, 24, 3);
       continue;
     }
-    ctx.fillStyle = inn ? '#2e5a46' : home ? '#3a5a8a' : smithy ? '#34343a' : bank ? '#24443a' : '#7a2a24';
+    ctx.fillStyle = inn ? '#2e5a46' : home ? '#3a5a8a' : smithy ? '#34343a' : bank ? '#24443a' : guild ? '#5a2034' : '#7a2a24';
     ctx.fillRect(wx - 16, wy - 1, 5, 18);
     ctx.fillRect(wx + 11, wy - 1, 5, 18);
     ctx.fillStyle = '#5a3a1c';
@@ -695,9 +696,9 @@ function drawHouse(ctx: C, b: Building) {
   ctx.roundRect(dx - 14, dTop - 3, 28, 39, [13, 13, 0, 0]);
   ctx.fill();
   const dg = ctx.createLinearGradient(dx - 11, 0, dx + 11, 0);
-  dg.addColorStop(0, inn ? '#2f5a44' : smithy ? '#3a2a1e' : temple ? '#26346a' : bank ? '#1a3a2e' : '#6a3c1c');
-  dg.addColorStop(0.5, inn ? '#4a8064' : smithy ? '#5e4630' : temple ? '#4a62a8' : bank ? '#2e6a50' : '#9a5e30');
-  dg.addColorStop(1, inn ? '#2a4c3a' : smithy ? '#2e2018' : temple ? '#202c5a' : bank ? '#163024' : '#5e341a');
+  dg.addColorStop(0, inn ? '#2f5a44' : smithy ? '#3a2a1e' : temple ? '#26346a' : bank ? '#1a3a2e' : guild ? '#4a1a2a' : '#6a3c1c');
+  dg.addColorStop(0.5, inn ? '#4a8064' : smithy ? '#5e4630' : temple ? '#4a62a8' : bank ? '#2e6a50' : guild ? '#7a3048' : '#9a5e30');
+  dg.addColorStop(1, inn ? '#2a4c3a' : smithy ? '#2e2018' : temple ? '#202c5a' : bank ? '#163024' : guild ? '#3a1420' : '#5e341a');
   ctx.fillStyle = dg;
   ctx.beginPath();
   ctx.roundRect(dx - 11, dTop, 22, 36, [11, 11, 0, 0]);
@@ -710,7 +711,7 @@ function drawHouse(ctx: C, b: Building) {
     ctx.lineTo(dx + lx, dTop + 36);
     ctx.stroke();
   }
-  if (smithy || bank) {
+  if (smithy || bank || guild) {
     // 鉄の帯（銀行は金の帯）
     ctx.fillStyle = bank ? '#c8a448' : '#2a2a30';
     for (const by of [dTop + 9, dTop + 26]) ctx.fillRect(dx - 11, by, 22, 2.4);
@@ -771,6 +772,17 @@ function drawHouse(ctx: C, b: Building) {
     ctx.moveTo(sx + 8.5, sy + 7.5);
     ctx.lineTo(sx + 5.5, sy + 10.5);
     ctx.stroke();
+  } else if (guild) {
+    // 盾と交差した剣の看板
+    ctx.strokeStyle = '#e8eef4';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(sx - 1, sy + 10.5);
+    ctx.lineTo(sx + 9, sy + 1.5);
+    ctx.moveTo(sx + 9, sy + 10.5);
+    ctx.lineTo(sx - 1, sy + 1.5);
+    ctx.stroke();
+    guildShield(ctx, sx + 4, sy + 6, 0.55);
   } else if (bank) {
     // 金貨の看板
     ctx.fillStyle = '#a07c20';
@@ -836,7 +848,7 @@ function drawHouse(ctx: C, b: Building) {
   roofPath.lineTo(x1 - 16, roofTop);
   roofPath.lineTo(x0 + 16, roofTop);
   roofPath.closePath();
-  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : bank ? ['#5a9a78', '#2e6a4e', '#1c4634'] : inn ? ['#5a8aa8', '#2c5068', '#1e3a4e'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
+  const rc = temple ? ['#6a8ad0', '#34529a', '#22366a'] : guild ? ['#a8485e', '#6e2438', '#461424'] : bank ? ['#5a9a78', '#2e6a4e', '#1c4634'] : inn ? ['#5a8aa8', '#2c5068', '#1e3a4e'] : smithy ? ['#7a828c', '#4a5059', '#2e333a'] : home ? ['#d0944a', '#8f5a26', '#5e3818'] : ['#d0584a', '#9a3a30', '#6e2620'];
   const rg = ctx.createLinearGradient(0, roofTop, 0, eave);
   rg.addColorStop(0, rc[0]);
   rg.addColorStop(0.6, rc[1]);
@@ -950,6 +962,80 @@ function drawHouse(ctx: C, b: Building) {
     ctx.stroke();
   }
 
+  // ハンターギルド：金の縁どり、破風の盾の紋章、旗竿、壁の垂れ幕、店先の掲示板
+  if (guild) {
+    ctx.fillStyle = '#d8b850';
+    ctx.fillRect(x0 - 8, eave - 3, w + 16, 1.6);
+    const cx = (x0 + x1) / 2;
+    const cy = (roofTop + eave) / 2 + 2;
+    ctx.fillStyle = '#3a1420';
+    ctx.beginPath();
+    ctx.moveTo(cx - 26, eave - 4);
+    ctx.lineTo(cx + 26, eave - 4);
+    ctx.lineTo(cx, roofTop - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#c8a448';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    guildShield(ctx, cx, cy + 3, 1.25);
+    // 旗竿（旗は drawHouseAnim でなびかせる）
+    const { x: fx, y: fy } = guildFlag(b);
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(fx - 1, fy, 2.2, roofTop + 14 - fy);
+    ctx.fillStyle = '#e8c050';
+    ellipsePath(ctx, fx + 0.1, fy - 1, 2, 2);
+    ctx.fill();
+    // 壁の垂れ幕
+    for (const bx of [x0 + 7, x1 - 19]) {
+      ctx.fillStyle = '#c8a448';
+      ctx.fillRect(bx - 1, wallTop + 3, 14, 2);
+      ctx.fillStyle = '#7a2438';
+      ctx.beginPath();
+      ctx.moveTo(bx, wallTop + 5);
+      ctx.lineTo(bx + 12, wallTop + 5);
+      ctx.lineTo(bx + 12, wallTop + 34);
+      ctx.lineTo(bx + 6, wallTop + 29);
+      ctx.lineTo(bx, wallTop + 34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(bx, wallTop + 5, 3, 27);
+      guildShield(ctx, bx + 6, wallTop + 15, 0.45);
+    }
+    // 掲示板（依頼の貼り紙）
+    const ax = x1 - 26;
+    const ay = bottom + 3;
+    groundShadow(ctx, ax, ay, 15, 3.5, 0.4);
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(ax - 12, ay - 22, 2.5, 22);
+    ctx.fillRect(ax + 9.5, ay - 22, 2.5, 22);
+    ctx.fillStyle = '#8a5a2c';
+    ctx.fillRect(ax - 14, ay - 24, 28, 15);
+    ctx.fillStyle = '#5e3a1c';
+    ctx.fillRect(ax - 15, ay - 26, 30, 3);
+    const papers: [number, number, number][] = [
+      [-11, -21, -0.1],
+      [-3, -22, 0.08],
+      [5, -21, -0.05],
+      [-7, -15.5, 0.06],
+      [2, -15, -0.1],
+    ];
+    for (const [px, py, rot] of papers) {
+      ctx.save();
+      ctx.translate(ax + px, ay + py);
+      ctx.rotate(rot);
+      ctx.fillStyle = '#f2e8cc';
+      ctx.fillRect(0, 0, 6, 5.5);
+      ctx.fillStyle = 'rgba(80,60,40,0.55)';
+      ctx.fillRect(1, 1.5, 4, 0.6);
+      ctx.fillRect(1, 3, 3, 0.6);
+      ctx.fillStyle = '#c83a2a';
+      ctx.fillRect(2.5, -0.4, 1, 1);
+      ctx.restore();
+    }
+  }
+
   // 武器防具屋：石の煙突から黒い煙と火の粉
   if (smithy) {
     const cx = x0 + 40;
@@ -1016,6 +1102,46 @@ function drawHouse(ctx: C, b: Building) {
     ctx.fillStyle = '#5a3428';
     ctx.fillRect(cx - 1.5, roofTop - 14, 14, 4);
   }
+}
+
+/** ハンターギルドの紋章：赤い盾に金の縁と剣 */
+function guildShield(ctx: C, x: number, y: number, s: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  const shield = () => {
+    ctx.beginPath();
+    ctx.moveTo(-7, -8);
+    ctx.lineTo(7, -8);
+    ctx.lineTo(7, 0);
+    ctx.quadraticCurveTo(6, 6, 0, 9);
+    ctx.quadraticCurveTo(-6, 6, -7, 0);
+    ctx.closePath();
+  };
+  ctx.fillStyle = '#c8a448';
+  ctx.save();
+  ctx.scale(1.18, 1.14);
+  shield();
+  ctx.fill();
+  ctx.restore();
+  const g = ctx.createLinearGradient(-7, -8, 7, 9);
+  g.addColorStop(0, '#d84a4a');
+  g.addColorStop(1, '#8a1e28');
+  ctx.fillStyle = g;
+  shield();
+  ctx.fill();
+  // 剣
+  ctx.fillStyle = '#f2f4f8';
+  ctx.fillRect(-0.9, -6.5, 1.8, 10);
+  ctx.fillStyle = '#e8c050';
+  ctx.fillRect(-3.5, 2.5, 7, 1.6);
+  ctx.fillRect(-0.9, 4, 1.8, 3);
+  ctx.restore();
+}
+
+/** ハンターギルドの旗竿の先 */
+function guildFlag(b: Building): { x: number; y: number } {
+  return { x: b.x * TILE + 34, y: b.y * TILE - 42 - 30 };
 }
 
 /** 銀行の屋根の金貨の紋章の中心 */
@@ -1145,6 +1271,21 @@ function drawHouseAnim(ctx: C, b: Building, time: number) {
       ctx.stroke();
     }
     glow(ctx, cx, cy, 16, '#ffd860', 0.18 + Math.sin(time * 2) * 0.06);
+  }
+  if (b.kind === 'guild') {
+    // 旗竿の先でなびく旗
+    const { x: fx, y: fy } = guildFlag(b);
+    const wave = (k: number) => Math.sin(time * 5 - k * 4) * 2.2 * k;
+    ctx.fillStyle = '#a02a3a';
+    ctx.beginPath();
+    ctx.moveTo(fx + 1, fy + 1);
+    const n = 6;
+    for (let i = 0; i <= n; i++) ctx.lineTo(fx + 1 + (i / n) * 22, fy + 1 + wave(i / n));
+    for (let i = n; i >= 0; i--) ctx.lineTo(fx + 1 + (i / n) * 22, fy + 13 - (i / n) * 2 + wave(i / n));
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#e8c050';
+    ctx.fillRect(fx + 1, fy + 6, 6, 1.4);
   }
   if (b.kind === 'inn' || b.kind === 'home') {
     const cx = x1 - 52;
@@ -1452,6 +1593,8 @@ export class Terrain {
   shelfColors: string[] = [];
   /** わが家：秘宝をテーブルに飾るか */
   cleared = false;
+  /** ダンジョン：地面と壁にかける色（乗算）。ダンジョンごとの雰囲気 */
+  tint = '';
 
   constructor(
     private map: TileMap,
@@ -1706,6 +1849,13 @@ export class Terrain {
         }
         ctx.stroke();
       }
+    }
+    if (this.tint) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = this.tint;
+      ctx.fillRect(v.x0, v.y0, v.x1 - v.x0, v.y1 - v.y0);
+      ctx.restore();
     }
     for (const t of this.torches) {
       if (m.isExplored(t.tx, t.ty) && t.x > v.x0 - 40 && t.x < v.x1 + 40 && t.y > v.y0 - 40 && t.y < v.y1 + 40) torch(ctx, t.x, t.y, time);

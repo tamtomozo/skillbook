@@ -1,4 +1,5 @@
 import { BOOKS, SKILLS, START_BOOK, isBook, lvUpCost } from './skills';
+import { DUNGEONS, FIELD_DUNGEONS, RANK_B, RANK_S, RUINS, rankDef } from './dungeons';
 
 export const HOTBAR_SIZE = 5;
 /** 持ち歩けるスキルブックの数 */
@@ -54,8 +55,16 @@ export interface SaveData {
   mats: Record<string, number>;
   potions: number;
   ethers: number;
+  /** これまでに到達した最も高い危険度（店の入荷などが決まる） */
   maxFloor: number;
+  /** 古代遺跡の秘宝を手に入れた */
   cleared: boolean;
+  /** ハンターギルドのランク（0 = E … 3 = B, 4 = S） */
+  rank: number;
+  /** 最後の階まで踏破したダンジョン */
+  conquered: string[];
+  /** ダンジョンごとに到達した最も深い階 */
+  reached: Record<string, number>;
   /** 古いセーブから移行したときの知らせ（一度表示したら消す） */
   notice?: string;
 }
@@ -87,6 +96,9 @@ export function newSave(): SaveData {
     ethers: 1,
     maxFloor: 0,
     cleared: false,
+    rank: 0,
+    conquered: [],
+    reached: {},
   };
 }
 
@@ -122,6 +134,10 @@ export function loadGame(): SaveData | null {
     d.bank = Math.max(0, Math.floor(Number(d.bank) || 0));
     if ((raw.ver ?? 1) < SAVE_VER) migrateV1(d, raw);
     migrateCursed(d, raw);
+    if (raw.rank === undefined) migrateGuild(d);
+    d.rank = Math.max(0, Math.min(RANK_S, Math.floor(Number(d.rank) || 0)));
+    d.conquered = (d.conquered ?? []).filter((id) => DUNGEONS.some((x) => x.id === id));
+    d.reached = { ...(d.reached ?? {}) };
     d.books = d.books.filter(isBook);
     d.carried = d.carried.filter((b) => d.books.includes(b)).slice(0, MAX_CARRY);
     if (d.books.length === 0) {
@@ -168,6 +184,24 @@ function migrateCursed(d: SaveData, raw: Partial<SaveData>) {
   d.cursed = list;
   d.curseSeq = Math.max(d.curseSeq || 0, Object.keys(old.cursedNo ?? {}).length, ...list.map((c) => c.no));
   delete (d as { cursedNo?: unknown }).cursedNo;
+}
+
+/**
+ * ハンターギルドができる前のセーブ。古代遺跡でたどり着いた階（= 危険度）から、ランクを認定する。
+ * 秘宝を手に入れていれば S、遺跡の地下7階まで行っていれば遺跡に入れる B。
+ */
+function migrateGuild(d: SaveData) {
+  const m = d.maxFloor;
+  d.rank = d.cleared ? RANK_S : m >= 7 ? RANK_B : m >= 5 ? 2 : m >= 3 ? 1 : 0;
+  // 認定したランクより下のダンジョンは踏破したことにする
+  d.conquered = FIELD_DUNGEONS.filter((x) => x.rank < d.rank).map((x) => x.id);
+  d.reached = {};
+  // 遺跡の途中の階から挑めるのは、遺跡に入れるランクのときだけ（旧版の階をそのまま引き継ぐ）
+  if (d.rank >= RANK_B) d.reached[RUINS.id] = Math.min(RUINS.depths.length, m);
+  if (m > 0) {
+    const r = rankDef(d.rank);
+    d.notice = (d.notice ? d.notice + ' ' : '') + `町にハンターギルドができた！ これまでの冒険が認められ、ランク ${r.name}（${r.title}）に認定された。ギルドでは各地のダンジョンへ出発したり、昇格試験を受けたりできる。`;
+  }
 }
 
 /** 旧版（ver 1）の本の値段。道具屋で買った本は代金を返す */

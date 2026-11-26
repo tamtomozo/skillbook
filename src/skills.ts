@@ -94,7 +94,7 @@ export interface BookDef {
   tier: number;
   source: 'start' | 'shop' | 'dungeon';
   price: number;
-  /** shop: この階に到達すると入荷 / dungeon: この階以降の宝箱に出現 */
+  /** shop: この危険度の階に到達すると入荷 / dungeon: この危険度以上の階の宝箱に出現 */
   minFloor: number;
   color: string;
   desc: string;
@@ -219,7 +219,7 @@ export const BOOKS: BookDef[] = [
   techBook('shield', 1, '盾術の書', '#8a7a5a', '城門を守る衛兵の心得をまとめた書。', ['shieldbash', 'ironwall', 'counter']),
   techBook('shield', 2, '盾術の書', '#7a8a9a', '重装騎士団に伝わる盾の戦法。', ['charge', 'sturdy', 'reflect']),
   techBook('shield', 3, '盾術の書', '#c8a040', '聖騎士の誓いと奥義が記された書。', ['sanctuary', 'fortress', 'bulwark']),
-  // ---- 2段階の書（遺跡の地下5階から）
+  // ---- 2段階の書（危険度5の階から）
   techBook('sword', 4, '剣技の書', '#ff5a3a', '剣気をまとってから放つ、二段構えの剣技の書。', ['kenkiup', 'zantetsu']),
   techBook('bow', 4, '弓術の書', '#c8a020', '構えてから射る、二段構えの弓術の書。', ['hawkup', 'meteorshot']),
   techBook('magic', 4, '魔術の書', '#8a50e0', '魔力を目覚めさせてから唱える、二段構えの魔導書。', ['manaup', 'meteor']),
@@ -323,7 +323,7 @@ export function purifyPrice(b: BookDef): number {
   return PURIFY_PRICE[b.kind];
 }
 
-/** 遺跡でしか見つからない本を道具屋が買い取る値段 */
+/** ダンジョンでしか見つからない本を道具屋が買い取る値段 */
 const DUNGEON_SELL: Record<BookKind, number> = { stat: 300, pinch: 400, tech: 500 };
 
 /** 道具屋が本を買い取る値段。店で売っている本は売値の半額。最初の本は売れない（0） */

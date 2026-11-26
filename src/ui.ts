@@ -1,7 +1,7 @@
 import type { Game } from './game';
 import type { Input } from './input';
 import { MAX_HP, MAX_MP } from './constants';
-import { FINAL_FLOOR } from './map';
+import { FIELD_DUNGEONS, RANKS, RANK_B, RUINS, dungeonById, rankDef, trialFor, type DungeonDef } from './dungeons';
 import { BOOKS, BOOK_KIND_NAME, CURSED_NAME, CURSE_COLOR, CURSE_POWER, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, pinchValueText, lvUpCost, pinchText, purifyPrice, sellPrice, spSpent, type BookKind, type Stat } from './skills';
 import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type CursedBook } from './state';
 import type { BookDef } from './skills';
@@ -9,7 +9,7 @@ import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT
 
 type SmithyTab = 'shop' | 'forge' | 'craft' | 'sell';
 
-type ModalKind = 'title' | 'book' | 'shop' | 'inn' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple' | 'bank';
+type ModalKind = 'title' | 'book' | 'shop' | 'inn' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'smithy' | 'temple' | 'bank' | 'guild' | 'promo';
 
 const CONTROLS = `
 <table class="ctrl">
@@ -22,14 +22,13 @@ const CONTROLS = `
   <tr><td>Esc</td><td>ヘルプ・画面を閉じる</td></tr>
 </table>`;
 
-const CHECKPOINTS = [1, 4, 7];
-
 export class UI {
   private hpFill: HTMLElement;
   private hpText: HTMLElement;
   private mpFill: HTMLElement;
   private mpText: HTMLElement;
   private locEl: HTMLElement;
+  private rankEl: HTMLElement;
   private expEl: HTMLElement;
   private spEl: HTMLElement;
   private goldEl: HTMLElement;
@@ -62,7 +61,7 @@ export class UI {
     ).join('');
     root.innerHTML = `
       <div class="hud">
-        <div class="name"><span>トレジャーハンター</span><span class="loc"></span></div>
+        <div class="name"><span class="rank"></span><span class="loc"></span></div>
         <div class="bar hp"><div class="fill"></div><span class="lbl">HP</span><span class="txt"></span></div>
         <div class="bar mp"><div class="fill"></div><span class="lbl">MP</span><span class="txt"></span></div>
         <div class="stats"><span class="exp"></span><span class="sp"></span><span class="gold"></span></div>
@@ -84,6 +83,7 @@ export class UI {
     this.mpFill = q('.bar.mp .fill');
     this.mpText = q('.bar.mp .txt');
     this.locEl = q('.hud .loc');
+    this.rankEl = q('.hud .rank');
     this.expEl = q('.stats .exp');
     this.spEl = q('.stats .sp');
     this.goldEl = q('.stats .gold');
@@ -134,7 +134,11 @@ export class UI {
     this.put(this.mpFill, 'w', `${((p.mp / MAX_MP) * 100).toFixed(1)}%`, (v) => (this.mpFill.style.width = v));
     this.text(this.hpText, `${Math.ceil(Math.max(0, p.hp))} / ${MAX_HP}`);
     this.text(this.mpText, `${Math.floor(p.mp)} / ${MAX_MP}`);
-    this.text(this.locEl, g.scene === 'town' ? 'はじまりの町' : g.scene === 'home' ? 'わが家' : `地下 ${g.floor} 階`);
+    const dg = g.dungeon;
+    this.text(this.locEl, g.scene === 'town' ? 'はじまりの町' : g.scene === 'home' ? 'わが家' : !dg ? '' : dg.trial && g.floor >= dg.depths.length ? `${dg.trial.name}の間` : `${dg.name} 地下${g.floor}階`);
+    const rk = rankDef(d.rank);
+    this.text(this.rankEl, `ランク ${rk.name}`);
+    this.put(this.rankEl, 'c', rk.color, (v) => this.rankEl.style.setProperty('--rc', v));
     const cost = spCost(d.spBought);
     this.text(this.expEl, `EXP ${d.exp}/${cost}`);
     this.cls(this.expEl, 'ready', d.exp >= cost);
@@ -216,7 +220,7 @@ export class UI {
       'title',
       `<div class="panel title-panel">
         <div class="logo"><span class="logo-icon">📖</span>スキルブック・ハンター</div>
-        <p class="sub">伝説の秘宝『${TREASURE_NAME}』が眠る古代遺跡。<br>スキルブックを集めて腕を磨き、地下${FINAL_FLOOR}階の最深部を目指せ！</p>
+        <p class="sub">伝説の秘宝『${TREASURE_NAME}』が眠る古代遺跡。<br>ハンターギルドでランクを上げ、遺跡の最深部（地下${RUINS.depths.length}階）を目指せ！</p>
         <div class="btns">
           <button data-act="new">はじめから</button>
           <button data-act="cont" ${hasSave() ? '' : 'disabled'}>つづきから</button>
@@ -244,23 +248,25 @@ export class UI {
         <div class="phead"><h2>❔ 遊び方</h2><button class="x" data-act="close">✕</button></div>
         ${CONTROLS}
         <ul class="tips">
+          <li><b>ハンターギルド</b>でランク（E→D→C→B）が決まり、挑めるダンジョンが増えていく。ダンジョンの最後の階にある<b>踏破の宝箱</b>を開けると、ギルドで<b>昇格試験</b>を受けられる。試験の最後に待つボスを倒せば昇格。<b>古代遺跡</b>にはランクB から入れる。</li>
+          <li>ダンジョンの各階には<b>危険度</b>があり、高いほど敵が強く、宝箱や鉱石が豪華になる。高い危険度の階に到達すると、お店の品ぞろえが増える。</li>
           <li><b>スキルブック</b>は3系統。<b>SP</b>を使って本の<b>レベル</b>を上げると効果が強くなる。
             <br>・<b>パラメタの書</b>（剛力・叡智・堅守・幸運）：レベルごとに攻撃力・魔力・防御力・運が上がる。
             <br>・<b>技の書</b>（剣技・弓術・魔術・盾術）：決まったレベルで技を覚える。<b>剣の技は剣、弓の技は弓、魔術は杖、盾の技は盾</b>を装備しているときだけ使える。アクティブな技はホットバー(1〜5)にセットして使う。
             <br>・<b>窮地の書</b>：体力が減ったときに発動し、パラメタを上げたり、防御力を攻撃力に回したりする。
-            <br>・<b>2段階の書</b>（地下5階から宝箱で見つかる）：1段目の技で「剣気」などの<b>状態</b>に入ると、<b>そのフロアにいる間</b>パラメタが少し上がり、2段目の大技が何度でも使えるようになる。階段を降りたり町へ戻ったりすると状態は解ける。</li>
+            <br>・<b>2段階の書</b>（危険度5以上の階の宝箱で見つかる）：1段目の技で「剣気」などの<b>状態</b>に入ると、<b>そのフロアにいる間</b>パラメタが少し上がり、2段目の大技が何度でも使えるようになる。階段を降りたり町へ戻ったりすると状態は解ける。</li>
           <li><b>攻撃力</b>は通常攻撃と剣・弓・盾の技、<b>魔力</b>は杖の攻撃と魔術の威力を上げる。<b>防御力</b>が高いほど受けるダメージが減り（防御力50で半分）、盾の技の威力も上がる。<b>運</b>が高いと会心の一撃（ダメージ1.5倍）が出やすくなり、敵がアイテムやゴールドを多く落とす。</li>
           <li><b>SP</b>は敵を倒して得た<b>経験値(EXP)</b>を変換して獲得する。変換するたびに必要EXPは増えていく。</li>
-          <li>初級・中級の書は<b>道具屋</b>で買える（中級は地下3階に到達すると入荷）。上級の書と窮地の書は<b>ダンジョンの宝箱</b>から見つかる。</li>
+          <li>初級・中級の書は<b>道具屋</b>で買える（中級は危険度3の階に到達すると入荷）。上級の書と窮地の書は<b>ダンジョンの宝箱</b>から見つかる。</li>
           <li>本は手に入れた時点では<b>レベル0（効果なし）</b>。SPでレベルを上げると効果が出る。</li>
           <li>宝箱で拾った本は<b>呪われていて</b>、正体が分からず使えない。町の<b>神殿</b>でゴールドを払って浄化すると、正体が分かり使えるようになる。呪われた本はかばんの枠を使わない。</li>
           <li>宝箱からは持っている本と<b>同じ本</b>が出ることもある。同じ本は<b>予備</b>になり、<b>道具屋の「本を売る」</b>で売れる。使っている本も売れる（上げるのに使ったSPは全部戻り、その本の技は忘れる）。</li>
           <li>持ち歩けるスキルブックは<b>3冊まで</b>。残りは<b>わが家の本棚</b>にしまい、家で入れ替える。本棚にある本のスキルは、覚えていても使えず、レベルも上げられない。</li>
           <li>体力・MPの上限は<b>100で固定</b>。スキルブックと装備で強くなろう。</li>
-          <li><b>武器防具屋</b>では武器（剣・弓・杖・盾）と鎧を売っている。剣・弓は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、弓なら矢、杖なら魔力の弾、盾なら盾で殴る。深い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。鉱石は遺跡の壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
+          <li><b>武器防具屋</b>では武器（剣・弓・杖・盾）と鎧を売っている。剣・弓は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、弓なら矢、杖なら魔力の弾、盾なら盾で殴る。危険度の高い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。鉱石はダンジョンの壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
           <li>魔物は倒すと、ときどき<b>素材</b>（スライムゼリー・コウモリの翼・ゴブリンの牙など）を落とす。武器防具屋の<b>装備作成</b>タブで、素材と鉱石から<b>店では買えない特別な武器と防具</b>を作れる。作った装備には追加効果がある。</li>
           <li>宿屋で休むと全回復＆セーブ。倒れると所持金の半分を失って町へ戻される。</li>
-          <li><b>銀行</b>に預けたゴールドは、倒れても減らない。遺跡で階段を降りるたびに少し利息もつく。買い物をするときは引き出そう。</li>
+          <li><b>銀行</b>に預けたゴールドは、倒れても減らない。ダンジョンで階段を降りるたびに少し利息もつく。買い物をするときは引き出そう。</li>
         </ul>
         <div class="btns"><button data-act="close">閉じる</button></div>
       </div>`,
@@ -396,7 +402,7 @@ export class UI {
         : this.effectCard(book);
     const head = cursed
       ? `<div class="bhead cursed" style="--c:${CURSE_COLOR}">
-              <h3>${this.cursedName(selCurse!)}<span class="ktag curse">正体不明</span></h3><p>禍々しい気配に包まれた本。遺跡の宝箱で見つけた。</p>
+              <h3>${this.cursedName(selCurse!)}<span class="ktag curse">正体不明</span></h3><p>禍々しい気配に包まれた本。ダンジョンの宝箱で見つけた。</p>
               <div class="lvrow"><div class="lvtrack"></div><div class="lvact"><span class="lock">呪われていて<br>使えない</span></div></div>
             </div>`
       : `<div class="bhead" style="--c:${book.color}">
@@ -538,7 +544,7 @@ export class UI {
         const act = owned
           ? '<span class="done">購入済み</span>'
           : locked
-            ? `<span class="lock">地下${b.minFloor}階到達で入荷</span>`
+            ? `<span class="lock">危険度${b.minFloor}の階に<br>到達で入荷</span>`
             : `<button data-act="buybook" data-arg="${b.id}" ${d.gold >= b.price ? '' : 'disabled'}>${b.price} G</button>`;
         return `<div class="srow ${owned ? 'learned' : ''}">
           <div class="sicon book" style="--c:${b.color}">📕</div>
@@ -559,7 +565,7 @@ export class UI {
           <h4>道具</h4>${itemRows}
           <h4>技の書</h4>${bookRows('tech')}
           <h4>パラメタの書</h4>${bookRows('stat')}
-          <p class="note">上級の書と、体力が減ると発動する「窮地の書」は、遺跡の宝箱で見つかるらしい。ただし宝箱の本は呪われていて、神殿で浄化するまで使えないそうだ。</p>`;
+          <p class="note">上級の書と、体力が減ると発動する「窮地の書」は、ダンジョンの宝箱で見つかるらしい。ただし宝箱の本は呪われていて、神殿で浄化するまで使えないそうだ。</p>`;
     const sellRow = (b: BookDef) => {
       const price = sellPrice(b);
       const lv = g.bookLv(b.id);
@@ -589,14 +595,14 @@ export class UI {
     };
     const owned = BOOKS.filter((b) => d.books.includes(b.id));
     const sellList = `
-          <p class="note">いらなくなった本や、同じ本の予備を買い取ってもらえる。店の本は売値の半額、遺跡の本はパラメタ 300 G・窮地 400 G・技 500 G。売った本は、また道具屋で買ったり宝箱で見つけたりできる。</p>
+          <p class="note">いらなくなった本や、同じ本の予備を買い取ってもらえる。店の本は売値の半額、ダンジョンの本はパラメタ 300 G・窮地 400 G・技 500 G。売った本は、また道具屋で買ったり宝箱で見つけたりできる。</p>
           ${[...owned.filter((b) => g.sparesOf(b.id) > 0), ...owned.filter((b) => g.sparesOf(b.id) === 0)].map(sellRow).join('')}
           ${d.cursed.length ? `<p class="note">呪われた本（${d.cursed.length}冊）は買い取れない。神殿で浄化してから持ってこよう。</p>` : ''}`;
     this.open(
       'shop',
       `<div class="panel shop-panel">
         <div class="phead"><h2>🏪 道具屋</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
-        <p class="npc">${this.shopTab === 'buy' ? '店主「いらっしゃい！ 遺跡に潜るなら準備は万全にな。技の書もパラメタの書も揃ってるぜ。」' : '店主「本の買い取りかい？ ダブった本なら、いい値で引き取るぜ。」'}</p>
+        <p class="npc">${this.shopTab === 'buy' ? '店主「いらっしゃい！ ダンジョンに潜るなら準備は万全にな。技の書もパラメタの書も揃ってるぜ。」' : '店主「本の買い取りかい？ ダブった本なら、いい値で引き取るぜ。」'}</p>
         ${tabs}
         <div class="shop-list">${this.shopTab === 'buy' ? buyList : sellList}
         </div>
@@ -669,7 +675,7 @@ export class UI {
               : owned
                 ? `<button class="sub" data-act="equip" data-arg="${it.kind}:${it.id}">装備する</button>`
                 : locked
-                  ? `<span class="lock">地下${it.minFloor}階到達で入荷</span>`
+                  ? `<span class="lock">危険度${it.minFloor}の階に<br>到達で入荷</span>`
                   : `<button data-act="buyeq" data-arg="${it.kind}:${it.id}" ${d.gold >= it.price ? '' : 'disabled'}>${it.price} G</button>`;
             return `<div class="srow ${equipped ? 'equipped' : ''}">
               <div class="sicon">${locked ? '❔' : it.icon}</div>
@@ -697,10 +703,10 @@ export class UI {
                   : owns(it)
                     ? `<button class="sub" data-act="equip" data-arg="${it.kind}:${it.id}">装備する</button>`
                     : locked
-                      ? `<span class="lock">地下${it.minFloor}階到達で<br>作り方が分かる</span>`
+                      ? `<span class="lock">危険度${it.minFloor}の階に到達で<br>作り方が分かる</span>`
                       : `<button data-act="craft" data-arg="${it.kind}:${it.id}" ${g.canCraft(r) ? '' : 'disabled'}>作る<br><small>${r.gold} G</small></button>`;
                 const body = locked
-                  ? '<div class="sdesc">親方「こいつの作り方は、もっと深い階の魔物を見てからだな。」</div>'
+                  ? '<div class="sdesc">親方「こいつの作り方は、もっと危ない階の魔物を見てからだな。」</div>'
                   : `<div class="sdesc">${it.desc}<br><span class="eqfx">✨ ${it.fx ?? ''}</span>${owns(it) ? '' : `<div class="recipe">${needs}</div>`}</div>`;
                 return `<div class="srow craft-row ${wears(it) ? 'equipped' : ''} ${forged === `${it.kind}:${it.id}` ? 'forged' : ''}">
               <div class="sicon">${locked ? '❔' : it.icon}</div>
@@ -741,7 +747,7 @@ export class UI {
           })
           .join('');
     } else {
-      npc = `親方「遺跡で掘った鉱石を持ってきな。鉄なら +2 まで、魔法銀なら +4、竜炎石があれば +${MAX_PLUS} まで鍛えてやる。」`;
+      npc = `親方「ダンジョンで掘った鉱石を持ってきな。鉄なら +2 まで、魔法銀なら +4、竜炎石があれば +${MAX_PLUS} まで鍛えてやる。」`;
       section = (kind) =>
         items
           .filter((it) => it.kind === kind && owns(it))
@@ -842,11 +848,11 @@ export class UI {
       'temple',
       `<div class="panel shop-panel temple-panel">
         <div class="phead"><h2>⛪ 神殿</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
-        <p class="npc">神官「遺跡の書には古の呪いが染みついております。祈りを捧げれば呪いは祓われ、本来の姿を取り戻しましょう。強い力を秘めた書ほど呪いも強く、お布施も多くいただきます。」</p>
+        <p class="npc">神官「ダンジョンの書には古の呪いが染みついております。祈りを捧げれば呪いは祓われ、本来の姿を取り戻しましょう。強い力を秘めた書ほど呪いも強く、お布施も多くいただきます。」</p>
         <div class="shop-list">
           ${reveal}
           <h4>呪われた本</h4>
-          ${rows || '<p class="note">呪われた本は持っていない。遺跡の宝箱で見つけた本は呪われているので、ここへ持ってこよう。</p>'}
+          ${rows || '<p class="note">呪われた本は持っていない。ダンジョンの宝箱で見つけた本は呪われているので、ここへ持ってこよう。</p>'}
         </div>
       </div>`,
       (act, arg) => {
@@ -886,7 +892,7 @@ export class UI {
       'bank',
       `<div class="panel bank-panel">
         <div class="phead"><h2>🏦 銀行</h2><button class="x" data-act="close">✕</button></div>
-        <p class="npc">頭取「いらっしゃいませ。お預かりしたゴールドは、遺跡で力尽きても一枚たりとも減りません。冒険の前にぜひどうぞ。」</p>
+        <p class="npc">頭取「いらっしゃいませ。お預かりしたゴールドは、ダンジョンで力尽きても一枚たりとも減りません。冒険の前にぜひどうぞ。」</p>
         <div class="bank-sum">
           <div class="bcell"><div class="blbl">所持金</div><div class="bval">${d.gold} G</div><div class="bsub">倒れると半分を失う</div></div>
           <div class="bcell safe"><div class="blbl">預金</div><div class="bval">${d.bank} G</div><div class="bsub">倒れても減らない</div></div>
@@ -896,7 +902,7 @@ export class UI {
           <div class="bop"><h4>預ける</h4><div class="bbtns">${row('deposit', d.gold)}</div></div>
           <div class="bop"><h4>引き出す</h4><div class="bbtns">${row('withdraw', d.bank)}</div></div>
         </div>
-        <p class="note">利息：遺跡で階段を1つ降りるたびに、預金の ${Math.round(BANK_RATE * 100)}%（1回 ${BANK_INTEREST_CAP} G まで）がつく。${next > 0 ? `いまの預金なら 1回 <b>${next} G</b>。` : ''}<br>買い物は所持金でしかできない。手数料はかからない。</p>
+        <p class="note">利息：ダンジョンで階段を1つ降りるたびに、預金の ${Math.round(BANK_RATE * 100)}%（1回 ${BANK_INTEREST_CAP} G まで）がつく。${next > 0 ? `いまの預金なら 1回 <b>${next} G</b>。` : ''}<br>買い物は所持金でしかできない。手数料はかからない。</p>
       </div>`,
       (act, arg) => {
         if (act === 'close') {
@@ -933,23 +939,145 @@ export class UI {
     );
   }
 
+  /** 古代遺跡の入口。ランクB になるまではギルドに封鎖されている */
   showEntrance() {
     const d = this.game.data;
-    const btns = CHECKPOINTS.filter((f) => f === 1 || d.maxFloor >= f)
-      .map((f) => `<button data-act="go" data-arg="${f}">地下 ${f} 階から</button>`)
+    if (d.rank < RUINS.rank) {
+      this.open(
+        'entrance',
+        `<div class="panel small-panel">
+          <h2>🏛️ 古代遺跡</h2>
+          <p class="npc">入口には鉄の柵が下ろされ、ハンターギルドの封印札が貼られている。<br>「ランク${rankDef(RUINS.rank).name}以上のハンター以外、立ち入りを禁ず」</p>
+          <p class="note">ハンターギルドでランクを上げよう。（いまはランク ${rankDef(d.rank).name}）</p>
+          <div class="btns"><button data-act="close">戻る</button></div>
+        </div>`,
+        () => this.close(),
+      );
+      return;
+    }
+    const reached = d.reached[RUINS.id] ?? 0;
+    const btns = [1, ...(RUINS.checkpoints ?? [])]
+      .filter((f) => f === 1 || reached >= f)
+      .map((f) => `<button data-act="go" data-arg="${f}">地下 ${f} 階から<small class="dep">（危険度 ${RUINS.depths[f - 1]}）</small></button>`)
       .join('');
     this.open(
       'entrance',
       `<div class="panel small-panel">
         <h2>🏛️ 古代遺跡</h2>
         <p class="npc">ひんやりとした空気が流れ出ている…。</p>
-        <p class="note">最深到達: ${d.maxFloor > 0 ? `地下 ${d.maxFloor} 階` : 'なし'}（地下4階・7階に到達すると、そこから挑戦できる）</p>
+        <p class="note">最深到達: ${reached > 0 ? `地下 ${reached} 階` : 'なし'}（地下${(RUINS.checkpoints ?? []).join('階・')}階に到達すると、そこから挑戦できる）</p>
         <div class="btns col">${btns}<button data-act="close" class="sub">やめる</button></div>
       </div>`,
       (act, arg) => {
         this.close();
-        if (act === 'go') this.game.enterDungeon(Number(arg));
+        if (act === 'go') this.game.enterDungeon(RUINS.id, Number(arg));
       },
+    );
+  }
+
+  // ---------------------------------------------------------------- ハンターギルド
+
+  showGuild() {
+    const g = this.game;
+    const d = g.data;
+    const r = rankDef(d.rank);
+    const trial = trialFor(d.rank);
+    const req = trial?.requires ? dungeonById(trial.requires) : undefined;
+    const ready = !!trial && (!req || d.conquered.includes(req.id));
+    const next = trial
+      ? ready
+        ? `<b>昇格試験</b>を受けられる！ 合格すればランク ${rankDef(d.rank + 1).name}。`
+        : `『${req?.name}』を踏破すると、ランク ${rankDef(d.rank + 1).name} への昇格試験を受けられる。`
+      : d.rank === RANK_B
+        ? '古代遺跡への立ち入りが許されている。最深部の秘宝を手に入れれば、伝説の S ランクだ。'
+        : '伝説の秘宝を手に入れた、ギルドの誇り。';
+    const ladder = RANKS.map(
+      (x, i) => `<span class="${i < d.rank ? 'past' : i === d.rank ? 'cur' : ''}" style="--rc:${x.color}">${x.name}</span>`,
+    ).join('<i>›</i>');
+    const range = (x: DungeonDef) => {
+      const lo = Math.min(...x.depths);
+      const hi = Math.max(...x.depths);
+      return lo === hi ? `危険度 ${lo}` : `危険度 ${lo}〜${hi}`;
+    };
+    const rows = FIELD_DUNGEONS.map((x) => {
+      const open = d.rank >= x.rank;
+      const done = d.conquered.includes(x.id);
+      const reached = d.reached[x.id] ?? 0;
+      const act = !open
+        ? `<span class="lock">ランク${rankDef(x.rank).name}で<br>挑める</span>`
+        : x.from === 'ruin'
+          ? '<span class="lock">町の遺跡の<br>入口から</span>'
+          : `<button data-act="go" data-arg="${x.id}">出発</button>`;
+      return `<div class="srow dg ${open ? '' : 'locked'}">
+        <div class="sicon">${open ? x.icon : '🔒'}</div>
+        <div class="sinfo">
+          <div class="sname">${x.name}<span class="rtag" style="--rc:${rankDef(x.rank).color}">ランク${rankDef(x.rank).name}</span>${done ? '<span class="dtag">踏破</span>' : ''}</div>
+          <div class="sdesc">${x.desc}<br><small>全${x.depths.length}階・${range(x)}${reached ? `・到達 地下${reached}階` : ''}${x.reward && open ? `・踏破の宝箱 ${done ? Math.round(x.reward / 2) : x.reward} G` : ''}</small></div>
+        </div>
+        <div class="sact">${act}</div>
+      </div>`;
+    }).join('');
+    const trialRow = trial
+      ? `<h4>昇格試験</h4>
+        <div class="srow dg trial ${ready ? 'ready' : 'locked'}">
+          <div class="sicon">${trial.icon}</div>
+          <div class="sinfo">
+            <div class="sname">${trial.name}<span class="rtag" style="--rc:${rankDef(d.rank + 1).color}">→ ランク${rankDef(d.rank + 1).name}</span></div>
+            <div class="sdesc">${trial.desc}<br><small>全${trial.depths.length}階・${range(trial)}・最後の階でボスと戦う（途中で町へ戻ればやり直せる）</small></div>
+          </div>
+          <div class="sact">${ready ? `<button data-act="go" data-arg="${trial.id}">試験に挑む</button>` : `<span class="lock">『${req?.name}』を<br>踏破すると受験できる</span>`}</div>
+        </div>`
+      : '';
+    const npc =
+      d.rank === 0 && !d.conquered.length
+        ? '受付嬢「ようこそ、ハンターギルドへ！ 新人さんはランクE から。まずは森の洞窟の一番奥にある踏破の宝箱を目指してみてください。踏破できたら昇格試験を受けられますよ。」'
+        : ready
+          ? '受付嬢「踏破の報告、確かに受け取りました！ 昇格試験の準備はできています。腕に自信がついたらいつでもどうぞ。」'
+          : d.rank >= RANK_B
+            ? '受付嬢「あなたほどのハンターなら、古代遺跡の奥にも挑めるはず。どうかご無事で。」'
+            : '受付嬢「ダンジョンの最後の階には、踏破の証になる宝箱があります。開けたら昇格試験を受けられますよ。」';
+    this.open(
+      'guild',
+      `<div class="panel shop-panel guild-panel">
+        <div class="phead"><h2>🛡️ ハンターギルド</h2><button class="x" data-act="close">✕</button></div>
+        <p class="npc">${npc}</p>
+        <div class="guild-card" style="--rc:${r.color}">
+          <div class="rank-badge">${r.name}</div>
+          <div class="rinfo">
+            <div class="rtitle">ランク ${r.name}・${r.title}</div>
+            <div class="rnext">${next}</div>
+            <div class="rladder">${ladder}</div>
+          </div>
+        </div>
+        <div class="shop-list">
+          ${trialRow}
+          <h4>ダンジョン</h4>
+          ${rows}
+        </div>
+      </div>`,
+      (act, arg) => {
+        this.close();
+        if (act === 'go') g.enterDungeon(arg);
+      },
+    );
+  }
+
+  /** 昇格試験に合格した */
+  showPromotion(rank: number) {
+    const r = rankDef(rank);
+    const now = FIELD_DUNGEONS.filter((x) => x.rank === rank);
+    const where = now.map((x) => `${x.icon} <b>${x.name}</b>${x.from === 'ruin' ? '（町の遺跡の入口から）' : ''}`).join('、');
+    this.open(
+      'promo',
+      `<div class="panel small-panel promo" style="--rc:${r.color}">
+        <h2>🎖️ 昇格試験 合格！</h2>
+        <div class="rank-badge big">${r.name}</div>
+        <p>ランク <b>${r.name}</b>（${r.title}）に認定された！</p>
+        ${where ? `<p class="note">${where} に挑めるようになった。</p>` : ''}
+        <p class="note">階段から町へ戻ろう。</p>
+        <div class="btns"><button data-act="ok">やった！</button></div>
+      </div>`,
+      () => this.close(),
     );
   }
 
@@ -972,6 +1100,7 @@ export class UI {
       `<div class="panel small-panel clear">
         <div class="logo">✨ GAME CLEAR ✨</div>
         <p>ついに伝説の秘宝『<b>${TREASURE_NAME}</b>』を手に入れた！</p>
+        <p>ハンターギルドから、伝説の <b>ランク ${rankDef(this.game.data.rank).name}</b> に認定された！</p>
         <p class="note">トレジャーハンターの名は、遺跡の伝説とともに語り継がれるだろう。<br>このまま冒険を続けることもできる。</p>
         <div class="btns"><button data-act="ok">冒険を続ける</button></div>
       </div>`,

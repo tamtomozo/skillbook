@@ -25,6 +25,10 @@ export interface EnemyDef {
   flying?: boolean;
   ranged?: boolean;
   color: string;
+  /** 見た目の大きさの倍率（昇格試験のボス） */
+  scale?: number;
+  /** 昇格試験のボス。倒すとランクが上がる */
+  boss?: boolean;
 }
 
 export const ENEMIES: EnemyDef[] = [
@@ -91,12 +95,13 @@ export class Enemy implements Box {
   alive = true;
   seed = Math.random() * 10;
 
-  constructor(public def: EnemyDef, x: number, y: number, floor: number) {
+  /** depth: その階の危険度 */
+  constructor(public def: EnemyDef, x: number, y: number, depth: number) {
     this.x = x;
     this.y = y;
     this.w = def.w;
     this.h = def.h;
-    const f = Math.max(0, floor - 1);
+    const f = Math.max(0, depth - 1);
     this.maxHp = this.hp = Math.round(def.hp * (1 + 0.22 * f));
     this.dmg = Math.round(def.dmg * (1 + 0.1 * f));
     this.speed = def.speed;
@@ -169,6 +174,8 @@ export type ChestContent =
   | { kind: 'ether'; amount: number }
   | { kind: 'ore'; ore: string; amount: number }
   | { kind: 'book'; book: string }
+  /** ダンジョンの最後の階にある踏破の宝箱 */
+  | { kind: 'conquer'; gold: number; ore: string; ores: number }
   | { kind: 'treasure' };
 
 export interface Chest {

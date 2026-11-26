@@ -1,6 +1,7 @@
 import { FONT, LIGHT_R, MAX_HP, MAX_MP, TILE } from './constants';
 import { Input } from './input';
-import { FINAL_FLOOR, T, TileMap, buildHome, buildTown, generateDungeon, type Furniture, type Label } from './map';
+import { T, TileMap, buildHome, buildTown, generateArena, generateDungeon, type FloorGoal, type Furniture, type Label } from './map';
+import { RANK_S, dungeonById, rankDef, type DungeonDef } from './dungeons';
 import {
   Enemy,
   Player,
@@ -53,6 +54,9 @@ export class Game {
   scene: 'town' | 'dungeon' | 'home' = 'town';
   /** わが家の家具（本棚・ベッドを調べるのに使う） */
   private furniture: Furniture[] = [];
+  /** いま潜っているダンジョン（町・わが家では null） */
+  dungeon: DungeonDef | null = null;
+  /** ダンジョンの何階目か */
   floor = 0;
   map = new TileMap(1, 1, T.GRASS);
   labels: Label[] = [];
@@ -108,7 +112,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.ui = new UI(this, uiRoot);
     this.resize(window.innerWidth, window.innerHeight);
-    this.goTown(false, true);
+    this.goTown(false, 'start');
     this.ui.showTitle();
     requestAnimationFrame(this.loop);
   }
@@ -201,7 +205,7 @@ export class Game {
     saveGame(this.data);
     this.ui.log('トレジャーハンターの冒険が始まった！', '#ffd84a');
     this.ui.log('[K] でスキルブックを開き、SPを使って本のレベルを上げよう。本はLv0（効果なし）から始まる。');
-    this.ui.log('スキルブックは「パラメタ」「技」「窮地」の3系統。道具屋や遺跡の宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
+    this.ui.log('スキルブックは「パラメタ」「技」「窮地」の3系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
     this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。`);
   }
 
@@ -466,15 +470,26 @@ export class Game {
     p.invuln = 0;
   }
 
-  goTown(save = true, atStart: boolean | 'home' = false) {
+  /** いる階の危険度（町・わが家では 0） */
+  get depth(): number {
+    return this.dungeon ? this.dungeon.depths[this.floor - 1] ?? 0 : 0;
+  }
+
+  /**
+   * 町へ。at: 立つ場所（start: 広場 / home: わが家の前 / ruin: 遺跡の入口 / guild: ギルドの前）。
+   * 省略するとダンジョンの入口（ギルドから出発したならギルドの前）
+   */
+  goTown(save = true, at?: 'start' | 'home' | 'ruin' | 'guild') {
     const t = buildTown();
+    const from = at ?? this.dungeon?.from ?? 'ruin';
     this.scene = 'town';
+    this.dungeon = null;
     this.floor = 0;
     this.map = t.map;
     this.labels = t.labels;
     this.terrain = new Terrain(t.map, 'town', t.buildings);
     this.clearWorld();
-    const pos = atStart === 'home' ? t.homeFront : atStart ? t.start : t.dungeonFront;
+    const pos = from === 'home' ? t.homeFront : from === 'start' ? t.start : from === 'guild' ? t.guildFront : t.dungeonFront;
     this.player.x = pos.x;
     this.player.y = pos.y;
     this.player.dir = 'down';
@@ -487,6 +502,7 @@ export class Game {
   goHome(save = true) {
     const h = buildHome();
     this.scene = 'home';
+    this.dungeon = null;
     this.floor = 0;
     this.map = h.map;
     this.labels = [];
@@ -502,26 +518,52 @@ export class Game {
     if (save) saveGame(this.data);
   }
 
-  enterDungeon(floor: number) {
+  /** ダンジョンの floor 階へ */
+  enterDungeon(id: string, floor = 1) {
+    const dg = dungeonById(id);
+    if (!dg || this.data.rank < dg.rank) return;
+    const d = this.data;
     this.scene = 'dungeon';
+    this.dungeon = dg;
     this.floor = floor;
-    this.data.maxFloor = Math.max(this.data.maxFloor, floor);
-    // 持っている本も出る（同じ本は予備になり、道具屋で売れる）
-    const eligible = BOOKS.filter((b) => b.source === 'dungeon' && b.minFloor <= floor).map((b) => b.id);
-    const g = generateDungeon(floor, eligible);
+    const depth = this.depth;
+    d.maxFloor = Math.max(d.maxFloor, depth);
+    d.reached[dg.id] = Math.max(d.reached[dg.id] ?? 0, floor);
+    const last = floor >= dg.depths.length;
+    let g;
+    if (last && dg.trial) {
+      g = generateArena(dg.trial);
+    } else {
+      // 持っている本も出る（同じ本は予備になり、道具屋で売れる）
+      const eligible = BOOKS.filter((b) => b.source === 'dungeon' && b.minFloor <= depth).map((b) => b.id);
+      const reward = dg.reward ?? 0;
+      const goal: FloorGoal = !last
+        ? { kind: 'stairs' }
+        : dg.final
+          ? { kind: 'treasure' }
+          : { kind: 'conquer', gold: d.conquered.includes(dg.id) ? Math.round(reward / 2) : reward };
+      g = generateDungeon(depth, eligible, goal);
+    }
     this.map = g.map;
     this.labels = [];
     this.terrain = new Terrain(g.map, 'dungeon', []);
+    this.terrain.tint = dg.tint ?? '';
     this.clearWorld();
     this.chests = g.chests;
     this.veins = g.veins;
-    this.enemies = g.spawns.map((s) => new Enemy(s.def, s.x, s.y, floor));
+    this.enemies = g.spawns.map((s) => new Enemy(s.def, s.x, s.y, depth));
     this.player.x = g.start.x;
     this.player.y = g.start.y;
     this.updateExplore();
     this.snapCamera();
-    this.banner(`地下 ${floor} 階`);
-    if (floor >= FINAL_FLOOR) this.ui.log('最深部だ…強い秘宝の気配がする！', '#e0a0ff');
+    if (last && dg.trial) {
+      this.banner(`${dg.trial.name}が現れた！`);
+      this.ui.log(`昇格試験の相手、${dg.trial.name}が待ちかまえている。倒せば合格だ！（階段で町へ戻ればやり直せる）`, '#ffb060');
+    } else {
+      this.banner(`${dg.name}　地下 ${floor} 階`);
+      if (last && dg.final) this.ui.log('最深部だ…強い秘宝の気配がする！', '#e0a0ff');
+      else if (last) this.ui.log('最後の階だ。どこかに踏破の宝箱があるはず。', '#ffd88a');
+    }
   }
 
   private banner(text: string) {
@@ -547,7 +589,26 @@ export class Game {
       d.bank += interest;
       this.ui.log(`銀行の預金に利息 ${interest} G がついた。（預金 ${d.bank} G）`, '#ffd84a');
     }
-    this.enterDungeon(this.floor + 1);
+    if (this.dungeon) this.enterDungeon(this.dungeon.id, this.floor + 1);
+  }
+
+  /** 昇格試験のボスを倒した：ランクが上がる */
+  private passTrial() {
+    const d = this.data;
+    const dg = this.dungeon;
+    if (!dg?.trial || d.rank !== dg.rank) return;
+    d.rank = dg.rank + 1;
+    const r = rankDef(d.rank);
+    // 試験の部屋はもう安全：手下も逃げ出す
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      e.alive = false;
+      this.burst(e.x, e.y - 8, e.def.color, 10, 70);
+    }
+    this.banner(`ランク ${r.name} に昇格！`);
+    this.ui.log(`昇格試験に合格した！ ランク ${r.name}（${r.title}）になった。`, r.color);
+    saveGame(d);
+    this.ui.showPromotion(d.rank);
   }
 
   /** 銀行にお金を預ける。預けた額を返す */
@@ -898,7 +959,7 @@ export class Game {
       for (const e of this.enemies) {
         const d = dist(p.x, p.y, e.x, e.y);
         if (!e.alive || d > 70 + e.w / 2 || d < 0.01) continue;
-        const k = e.def.id === 'golem' ? 0.4 : 1;
+        const k = e.def.id === 'golem' || e.def.boss ? 0.4 : 1;
         e.kbx = ((e.x - p.x) / d) * 240 * k;
         e.kby = ((e.y - p.y) / d) * 240 * k;
       }
@@ -1417,7 +1478,7 @@ export class Game {
     e.flash = 0.12;
     e.aggro = true;
     const d = Math.max(1, dist(fx, fy, e.x, e.y));
-    const k = e.def.id === 'golem' ? kb * 0.25 : kb;
+    const k = e.def.id === 'golem' || e.def.boss ? kb * 0.25 : kb;
     e.kbx += ((e.x - fx) / d) * k;
     e.kby += ((e.y - fy) / d) * k;
     this.float(e.x + rand(-6, 6), e.y + e.h / 2 - e.def.height - hoverOf(e, this.time) - 4, crit ? `会心 ${dmg}` : String(dmg), crit ? '#ffe040' : '#ffffff');
@@ -1434,14 +1495,14 @@ export class Game {
     this.burst(e.x, e.y - 8, e.def.color, 14, 90);
     const [g0, g1] = e.def.gold;
     const luck = this.stat('luck');
-    const gold = Math.round((g0 + Math.random() * (g1 - g0)) * (1 + this.floor * 0.1) * goldMult(luck));
+    const gold = Math.round((g0 + Math.random() * (g1 - g0)) * (1 + this.depth * 0.1) * goldMult(luck));
     this.pickups.push({ x: e.x, y: e.y, kind: 'gold', amount: gold, t: 0 });
     if (Math.random() < 0.05 * dropMult(luck)) {
       this.pickups.push({ x: e.x + rand(-10, 10), y: e.y + rand(-6, 6), kind: Math.random() < 0.6 ? 'potion' : 'ether', amount: 1, t: 0 });
     }
     const oreRate = (e.def.id === 'golem' ? 0.4 : 0.06) * dropMult(luck);
     if (Math.random() < oreRate) {
-      this.pickups.push({ x: e.x + rand(-10, 10), y: e.y + rand(-6, 6), kind: 'ore', ore: rollOre(this.floor, Math.random()).id, amount: 1, t: 0 });
+      this.pickups.push({ x: e.x + rand(-10, 10), y: e.y + rand(-6, 6), kind: 'ore', ore: rollOre(this.depth, Math.random()).id, amount: 1, t: 0 });
     }
     const mat = matOfEnemy(e.def.id);
     if (mat && Math.random() < matDropRate(e.def.id) * dropMult(luck)) {
@@ -1456,6 +1517,7 @@ export class Game {
       this.player.mp = Math.min(MAX_MP, this.player.mp + 5);
       this.burst(e.x, e.y - 10, '#a8f4ff', 6, 50);
     }
+    if (e.def.boss) this.passTrial();
     const cost = spCost(this.data.spBought);
     if (this.data.exp >= cost && this.data.exp - e.exp < cost) {
       this.ui.log('EXPが貯まった！ [K] スキルブックでSPに変換できる。', '#9fe870');
@@ -1517,7 +1579,7 @@ export class Game {
       e.stun -= dt;
     } else {
       if (d < 210) e.aggro = true;
-      else if (d > 400) e.aggro = false;
+      else if (d > 400 && !e.def.boss) e.aggro = false;
       if (e.aggro) {
         e.facing = dx > 0 ? 1 : -1;
         if (e.def.ranged) {
@@ -1730,7 +1792,7 @@ export class Game {
     this.map.traps.delete(k);
     this.map.sprung.add(k);
     this.ui.log('罠を踏んでしまった！', '#ff8080');
-    this.damagePlayer(10 + this.floor * 2, p.x, p.y - 1);
+    this.damagePlayer(10 + this.depth * 2, p.x, p.y - 1);
   }
 
   // ================================================================ 調べる
@@ -1744,7 +1806,7 @@ export class Game {
       const d = dist(p.x, p.y, (c.tx + 0.5) * TILE, (c.ty + 0.5) * TILE);
       if (c.opened || d >= bestD) continue;
       bestD = d;
-      best = { label: c.legendary ? '秘宝の箱を開ける' : c.locked ? '鍵付きの宝箱をこじ開ける' : '宝箱を開ける', act: () => this.openChest(c) };
+      best = { label: c.legendary ? '秘宝の箱を開ける' : c.content.kind === 'conquer' ? '踏破の宝箱を開ける' : c.locked ? '鍵付きの宝箱をこじ開ける' : '宝箱を開ける', act: () => this.openChest(c) };
     }
     for (const v of this.veins) {
       const d = dist(p.x, p.y, (v.tx + 0.5) * TILE, (v.ty + 0.5) * TILE);
@@ -1788,6 +1850,8 @@ export class Game {
             return { label: '神殿に入る', act: () => this.ui.showTemple() };
           case T.BANK_DOOR:
             return { label: '銀行に入る', act: () => this.ui.showBank() };
+          case T.GUILD_DOOR:
+            return { label: 'ハンターギルドに入る', act: () => this.ui.showGuild() };
           case T.ENTRANCE:
             return { label: '遺跡に入る', act: () => this.ui.showEntrance() };
           case T.STAIRS_DOWN:
@@ -1838,10 +1902,32 @@ export class Game {
         this.burst(cx, cy - 10, '#5a2a7a', 14, 70);
         break;
       }
+      case 'conquer': {
+        const d = this.data;
+        const dg = this.dungeon;
+        const first = !!dg && !d.conquered.includes(dg.id);
+        if (dg && first) d.conquered.push(dg.id);
+        d.gold += ct.gold;
+        const ore = oreById(ct.ore);
+        this.gainOre(ore.id, ct.ores);
+        d.potions += 1;
+        this.ring(cx, cy, 6, 90, '#ffd84a', 0.8);
+        this.burst(cx, cy - 10, '#ffd84a', 30, 130);
+        this.float(cx, cy - 30, `+${ct.gold}G`, '#ffd84a');
+        this.ui.log(`踏破の宝箱から ${ct.gold} G・${ore.name} ${ct.ores} 個・回復薬を手に入れた！`, '#ffd84a');
+        if (dg && first) {
+          this.banner(`${dg.name} 踏破！`);
+          this.ui.log(`${dg.name}を踏破した！ ハンターギルドで昇格試験を受けられるようになった。`, '#ffe8a0');
+        }
+        saveGame(d);
+        break;
+      }
       case 'treasure': {
         this.ring(cx, cy, 6, 120, '#e0a0ff', 1);
         this.burst(cx, cy - 10, '#e0a0ff', 40, 160);
         this.data.cleared = true;
+        this.data.rank = RANK_S;
+        if (this.dungeon && !this.data.conquered.includes(this.dungeon.id)) this.data.conquered.push(this.dungeon.id);
         this.ui.log(`伝説の秘宝『${TREASURE_NAME}』を手に入れた！`, '#e0a0ff');
         saveGame(this.data);
         this.ui.showClear();
@@ -1937,7 +2023,38 @@ export class Game {
     this.drawFloats(camX, camY);
     this.drawPrompt(camX, camY);
     if (this.scene === 'dungeon') this.drawMinimap();
+    this.drawBossBar();
     this.drawBanner();
+  }
+
+  /** 昇格試験のボスの体力（画面の上） */
+  private drawBossBar() {
+    const boss = this.enemies.find((e) => e.alive && e.def.boss);
+    if (!boss) return;
+    const ctx = this.ctx;
+    // 左上の HUD と右上の地図をよけて、画面の上の真ん中に出す
+    const w = Math.max(200, Math.min(380, this.VW - 600));
+    const x = (this.VW - w) / 2;
+    const y = 30;
+    ctx.font = `bold 15px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1a0f08';
+    ctx.strokeText(boss.def.name, this.VW / 2, y - 7);
+    ctx.fillStyle = '#ffd0a0';
+    ctx.fillText(boss.def.name, this.VW / 2, y - 7);
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.fillRect(x - 2, y - 2, w + 4, 12);
+    const k = Math.max(0, boss.hp) / boss.maxHp;
+    const g = ctx.createLinearGradient(0, y, 0, y + 8);
+    g.addColorStop(0, '#ff7060');
+    g.addColorStop(1, '#a8201c');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w * k, 8);
+    ctx.strokeStyle = 'rgba(255,220,160,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 2.5, y - 2.5, w + 5, 13);
   }
 
   private drawTraps(v: View) {

@@ -1480,3 +1480,125 @@ button.danger {
   color: #ffd84a;
   font-weight: normal;
 }
+
+/* ハンターギルド */
+.hud .rank {
+  color: var(--rc, #ffd88a);
+}
+.guild-panel .phead h2 {
+  color: #ffd0b0;
+}
+.guild-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  margin: 4px 0 6px;
+  border: 1px solid var(--rc);
+  border-radius: 8px;
+  background: radial-gradient(ellipse at left, color-mix(in srgb, var(--rc) 18%, transparent), rgba(0, 0, 0, 0.25));
+}
+.rank-badge {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  color: #1a0f08;
+  background: radial-gradient(circle at 35% 30%, #fff, var(--rc) 55%, color-mix(in srgb, var(--rc) 60%, #000));
+  border: 2px solid #1a0f08;
+  border-radius: 50% 50% 46% 46% / 40% 40% 60% 60%;
+  box-shadow:
+    0 0 0 2px var(--rc),
+    0 0 16px color-mix(in srgb, var(--rc) 60%, transparent);
+}
+.rank-badge.big {
+  width: 84px;
+  height: 84px;
+  font-size: 52px;
+  margin: 10px auto 6px;
+  animation: reveal 0.6s ease-out;
+}
+.guild-card .rinfo {
+  flex: 1;
+  min-width: 0;
+}
+.guild-card .rtitle {
+  font-size: 17px;
+  color: var(--rc);
+}
+.guild-card .rnext {
+  font-size: 13px;
+  color: #e8dcc0;
+  margin: 3px 0 5px;
+}
+.guild-card .rnext b {
+  color: #ffd84a;
+  font-weight: normal;
+}
+.rladder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.rladder span {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid rgba(176, 138, 74, 0.35);
+  color: #6a5e50;
+}
+.rladder span.past {
+  color: var(--rc);
+  border-color: color-mix(in srgb, var(--rc) 50%, transparent);
+}
+.rladder span.cur {
+  color: #1a0f08;
+  background: var(--rc);
+  border-color: var(--rc);
+}
+.rladder i {
+  font-style: normal;
+  color: #6a5e50;
+}
+.rtag,
+.dtag {
+  font-size: 11px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.rtag {
+  color: var(--rc);
+  border: 1px solid var(--rc);
+}
+.dtag {
+  color: #1a0f08;
+  background: #e8c050;
+}
+.srow.dg.locked {
+  opacity: 0.55;
+}
+.srow.dg.trial.ready {
+  border-color: #ffb060;
+  background: radial-gradient(ellipse at left, rgba(255, 170, 80, 0.16), rgba(0, 0, 0, 0.2));
+}
+.small-panel .dep {
+  font-size: 12px;
+  margin-left: 4px;
+  opacity: 0.75;
+}
+.promo h2 {
+  color: var(--rc);
+}
+.promo b {
+  color: var(--rc);
+  font-weight: normal;
+}
