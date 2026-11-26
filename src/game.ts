@@ -19,6 +19,7 @@ import { HOTBAR_SIZE, MAX_CARRY, bankInterest, loadGame, newSave, saveGame, spCo
 import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
 import { Terrain, type Light, type Sortable, type View } from './terrain';
 import { UI } from './ui';
+import { GAME_MIN_PER_SEC, clockOf, clockText, dayOf, discount, offText, phaseOf, saleOfDay, skyOf, sleepUntil, type Phase, type SaleDef, type SaleTarget } from './daytime';
 
 interface Interact {
   label: string;
@@ -93,6 +94,10 @@ export class Game {
   private bannerT = 0;
   private interact: Interact | null = null;
   private lastTime = 0;
+  /** いまの時間帯（変わったときに知らせる） */
+  private phase: Phase = 'day';
+  /** その日のセールを知らせた日 */
+  private saleToldDay = 0;
 
   // 画面（CSSピクセル）と拡大率
   private canvas: HTMLCanvasElement;
@@ -207,6 +212,7 @@ export class Game {
     this.ui.log('[K] でスキルブックを開き、SPを使って本のレベルを上げよう。本はLv0（効果なし）から始まる。');
     this.ui.log('スキルブックは「パラメタ」「技」「窮地」の3系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
     this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。`);
+    this.startClock();
   }
 
   continueGame() {
@@ -218,7 +224,8 @@ export class Game {
     this.player.hp = MAX_HP;
     this.player.mp = MAX_MP;
     this.goHome(false);
-    this.ui.log('冒険を再開した。', '#ffd84a');
+    this.ui.log(`冒険を再開した。（${this.day}日目 ${clockText(d.minutes)}）`, '#ffd84a');
+    this.startClock();
     if (d.notice) {
       this.ui.log(d.notice, '#ffd84a');
       delete d.notice;
@@ -494,7 +501,9 @@ export class Game {
     this.player.y = pos.y;
     this.player.dir = 'down';
     this.snapCamera();
+    this.terrain.lamps = t.lamps.map((l) => ({ x: (l.tx + 0.5) * TILE, y: (l.ty + 0.75) * TILE }));
     this.banner('はじまりの町');
+    if (this.started) this.tellSale();
     if (save) saveGame(this.data);
   }
 
@@ -692,7 +701,7 @@ export class Game {
   }
 
   buyItem(kind: 'potion' | 'ether') {
-    const price = kind === 'potion' ? 30 : 40;
+    const price = this.priceOf('item', kind === 'potion' ? 30 : 40);
     if (this.data.gold < price) return;
     this.data.gold -= price;
     if (kind === 'potion') this.data.potions++;
@@ -702,8 +711,9 @@ export class Game {
 
   buyBook(id: string) {
     const b = bookById(id);
-    if (b.source !== 'shop' || this.data.books.includes(id) || this.data.gold < b.price || this.data.maxFloor < b.minFloor) return;
-    this.data.gold -= b.price;
+    const price = this.priceOf('book', b.price);
+    if (b.source !== 'shop' || this.data.books.includes(id) || this.data.gold < price || this.data.maxFloor < b.minFloor) return;
+    this.data.gold -= price;
     this.acquireBook(id, '購入した');
     saveGame(this.data);
   }
@@ -713,8 +723,9 @@ export class Game {
     const d = this.data;
     const def = kind === 'weapon' ? WEAPONS.find((w) => w.id === id) : ARMORS.find((a) => a.id === id);
     const owned = kind === 'weapon' ? d.weapons : d.armors;
-    if (!def || owned.includes(id) || d.gold < def.price || d.maxFloor < def.minFloor) return;
-    d.gold -= def.price;
+    const price = def ? this.priceOf(kind, def.price) : 0;
+    if (!def || owned.includes(id) || d.gold < price || d.maxFloor < def.minFloor) return;
+    d.gold -= price;
     owned.push(id);
     this.ui.log(`${def.name}を購入した！`, '#ffd84a');
     this.equip(kind, id);
@@ -743,7 +754,7 @@ export class Game {
     const def = kind === 'weapon' ? weaponById(id) : armorById(id);
     const owned = kind === 'weapon' ? d.weapons : d.armors;
     const plus = this.plusOf(id);
-    const cost = forgeCost(def.price, plus);
+    const cost = this.priceOf('forge', forgeCost(def.price, plus));
     const need = forgeOre(plus);
     if (def.id !== id || !owned.includes(id) || plus >= MAX_PLUS || d.gold < cost || this.oreOf(need.ore.id) < need.n) return false;
     d.gold -= cost;
@@ -764,7 +775,7 @@ export class Game {
 
   /** レシピの素材とお金が足りているか */
   canCraft(r: Recipe): boolean {
-    if (this.data.gold < r.gold) return false;
+    if (this.data.gold < this.priceOf('craft', r.gold)) return false;
     for (const [id, n] of Object.entries(r.ores)) if (this.oreOf(id) < n) return false;
     for (const [id, n] of Object.entries(r.mats)) if (this.matOf(id) < n) return false;
     return true;
@@ -777,7 +788,7 @@ export class Game {
     const owned = kind === 'weapon' ? d.weapons : d.armors;
     if (!def?.craft || owned.includes(id) || d.maxFloor < def.minFloor || !this.canCraft(def.craft)) return false;
     const r = def.craft;
-    d.gold -= r.gold;
+    d.gold -= this.priceOf('craft', r.gold);
     for (const [k, n] of Object.entries(r.ores)) d.ores[k] -= n;
     for (const [k, n] of Object.entries(r.mats)) d.mats[k] -= n;
     owned.push(id);
@@ -830,6 +841,83 @@ export class Game {
     saveGame(d);
   }
 
+  // ---------------------------------------------------------------- 町の1日とセール
+
+  /** 何日目か（夜明けで変わる） */
+  get day(): number {
+    return dayOf(this.data.minutes);
+  }
+
+  /** 今日のセール（ない日は null） */
+  todaySale(): SaleDef | null {
+    return saleOfDay(this.day);
+  }
+
+  /** 今日のセールで割り引いた値段 */
+  priceOf(target: SaleTarget, base: number): number {
+    const s = this.todaySale();
+    return s && s.target === target ? discount(base, s.off) : base;
+  }
+
+  /** 時計を動かし始める（時間帯の知らせを出し直さないように、いまの時間帯を覚える） */
+  private startClock() {
+    this.phase = phaseOf(this.data.minutes);
+    this.saleToldDay = 0;
+    this.tellSale();
+  }
+
+  /** 時間を進める（メニューを開いているあいだは止まる） */
+  private advanceClock(dt: number) {
+    const d = this.data;
+    const before = this.day;
+    d.minutes += dt * GAME_MIN_PER_SEC;
+    if (this.day !== before) this.newDay();
+    const ph = phaseOf(d.minutes);
+    if (ph === this.phase) return;
+    this.phase = ph;
+    if (this.scene !== 'town') return;
+    if (ph === 'dusk') this.ui.log('日が傾いてきた。町が夕焼けに染まっていく。', '#ffb070');
+    else if (ph === 'night') this.ui.log('夜になった。街灯に火がともる。', '#a8b8ff');
+  }
+
+  /** 夜が明けて新しい日になった */
+  private newDay() {
+    if (this.scene === 'town') this.banner(`${this.day}日目の朝`);
+    this.ui.log(`夜が明けた。${this.day}日目の朝だ。`, '#ffe0a0');
+    this.phase = phaseOf(this.data.minutes);
+    this.tellSale();
+  }
+
+  /** 今日のセールを知らせる（1日に1回） */
+  private tellSale() {
+    const day = this.day;
+    if (this.saleToldDay === day) return;
+    this.saleToldDay = day;
+    const s = this.todaySale();
+    if (!s) return;
+    const shop = s.shop === 'shop' ? '道具屋' : '武器防具屋';
+    this.ui.log(`🏷️ 今日は${shop}で${s.name}が${offText(s.off)}のセールをやっている！`, '#ff8a8a');
+  }
+
+  /** いまベッドに入ると朝まで眠るか（夕方6時〜朝6時） */
+  sleepsTillMorning(): boolean {
+    const c = clockOf(this.data.minutes);
+    return c >= 18 * 60 || c < 6 * 60;
+  }
+
+  /** ベッドで休む。夜なら朝まで眠り、昼ならひと休み（1時間） */
+  private sleep() {
+    const night = this.sleepsTillMorning();
+    const before = this.day;
+    this.data.minutes = sleepUntil(this.data.minutes);
+    this.rest(night ? 'ぐっすり眠って朝を迎えた。' : 'ベッドでひと休みした。');
+    this.phase = phaseOf(this.data.minutes);
+    if (this.day !== before) {
+      this.banner(`${this.day}日目の朝`);
+      this.tellSale();
+    }
+  }
+
   rest(msg = 'ぐっすり休んだ。') {
     this.player.hp = MAX_HP;
     this.player.mp = MAX_MP;
@@ -850,6 +938,7 @@ export class Game {
       return;
     }
     if (!this.started) return;
+    this.advanceClock(dt);
     if (inp.pressed('KeyK', 'Tab')) {
       this.ui.showSkillbook();
       return;
@@ -1043,14 +1132,14 @@ export class Game {
       return;
     }
     if (this.weaponType === 'shield') {
-      // 盾：盾で殴る（シールドバッシュ）。威力は控えめだが大きく吹き飛ばす
+      // 盾：盾で殴る（シールドバッシュ）。威力は控えめだが大きく吹き飛ばす（剣の倍以上）
       p.attackCd = 0.4;
       this.swing(0.26);
       const bx = p.x + p.aimX * 18;
       const by = p.y + p.aimY * 16;
       this.ring(bx, by, 4, 20, '#f0e8d8', 0.18);
       for (const e of this.enemies) {
-        if (e.alive && dist(bx, by, e.x, e.y) < 20 + e.w / 2) this.hitEnemy(e, 8 + this.atk * 0.8 + this.stat('def') * 0.3, p.x, p.y, 340);
+        if (e.alive && dist(bx, by, e.x, e.y) < 20 + e.w / 2) this.hitEnemy(e, 8 + this.atk * 0.8 + this.stat('def') * 0.3, p.x, p.y, 510);
       }
       return;
     }
@@ -1732,7 +1821,7 @@ export class Game {
         if (it.kind === 'gold') {
           const g = it.amount;
           this.data.gold += g;
-          this.float(p.x, p.y - 34, `+${g}G`, '#ffd84a');
+          this.float(p.x, p.y - 34, `+${g} G`, '#ffd84a');
         } else if (it.kind === 'ore') {
           const ore = oreById(it.ore ?? 'iron');
           this.gainOre(ore.id, it.amount);
@@ -1828,7 +1917,7 @@ export class Game {
         if (dist(p.x, p.y, nx, ny) < 22) {
           return f.kind === 'shelf'
             ? { label: '本棚を見る', act: () => this.ui.showShelf() }
-            : { label: 'ベッドで休む', act: () => this.rest('ベッドでひと休みした。') };
+            : { label: this.sleepsTillMorning() ? 'ベッドで眠る（朝まで）' : 'ベッドで休む', act: () => this.sleep() };
         }
       }
     }
@@ -1877,7 +1966,7 @@ export class Game {
         const g = ct.amount;
         this.data.gold += g;
         this.ui.log(`${g} ゴールドを手に入れた！`, '#ffd84a');
-        this.float(cx, cy - 30, `+${g}G`, '#ffd84a');
+        this.float(cx, cy - 30, `+${g} G`, '#ffd84a');
         break;
       }
       case 'potion':
@@ -1915,7 +2004,7 @@ export class Game {
         d.potions += 1;
         this.ring(cx, cy, 6, 90, '#ffd84a', 0.8);
         this.burst(cx, cy - 10, '#ffd84a', 30, 130);
-        this.float(cx, cy - 30, `+${ct.gold}G`, '#ffd84a');
+        this.float(cx, cy - 30, `+${ct.gold} G`, '#ffd84a');
         this.ui.log(`踏破の宝箱から ${ct.gold} G・${ore.name} ${ct.ores} 個・回復薬を手に入れた！`, '#ffd84a');
         if (dg && first) {
           this.banner(`${dg.name} 踏破！`);
@@ -1996,6 +2085,9 @@ export class Game {
     ctx.imageSmoothingEnabled = true;
     ctx.fillStyle = this.scene === 'dungeon' ? '#050308' : this.scene === 'home' ? '#0e0905' : '#23401d';
     ctx.fillRect(0, 0, this.VW, this.VH);
+    const sky = skyOf(this.data.minutes);
+    this.terrain.night = this.scene === 'town' ? sky.lamp : 0;
+    this.terrain.clock = clockOf(this.data.minutes);
 
     const camX = this.camX + (this.shake > 0 ? rand(-3, 3) : 0);
     const camY = this.camY + (this.shake > 0 ? rand(-3, 3) : 0);
@@ -2015,8 +2107,9 @@ export class Game {
     this.drawProjectiles();
     this.drawEffects();
 
-    // 暗闇と灯り
+    // 暗闇と灯り（町とわが家は時刻で明るさが変わる）
     if (this.scene === 'dungeon') this.drawDarkness(view, camX, camY);
+    else this.drawDaylight(view, camX, camY);
 
     // 画面に重ねる表示
     ctx.setTransform(d, 0, 0, d, 0, 0);
@@ -2368,13 +2461,48 @@ export class Game {
     }
     if (this.flameT > 0) lights.push({ x: p.x, y: p.y, r: 150, tint: 'rgba(255,130,50,0.14)' });
     for (const c of this.chests) if (c.legendary && !c.opened) lights.push({ x: (c.tx + 0.5) * TILE, y: (c.ty + 0.5) * TILE, r: 110, tint: 'rgba(200,130,255,0.18)' });
+    this.shade(lights, 'rgba(4,2,10,0.94)', camX, camY);
+  }
 
+  /**
+   * 町とわが家の時刻の明るさ。朝焼け・夕焼けの色を乗算で掛け、夜は暗くして街灯や窓の灯りだけ明るく残す
+   */
+  private drawDaylight(v: View, camX: number, camY: number) {
+    const sky = skyOf(this.data.minutes);
+    const home = this.scene === 'home';
+    const ctx = this.ctx;
+    // 室内は外の光が少し差しこむだけ
+    const tintA = home ? sky.tintA * 0.45 : sky.tintA;
+    if (tintA > 0.01) {
+      const [r, g, b] = sky.tint.map(Math.round);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgba(${r},${g},${b},${tintA})`;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.restore();
+    }
+    if (home) return;
+    if (sky.dark > 0.01) {
+      const p = this.player;
+      const lights: Light[] = [{ x: p.x, y: p.y - 10, r: 120 }, ...this.terrain.lights(v)];
+      for (const pr of this.projectiles) {
+        if (pr.kind === 'fireball') lights.push({ x: pr.x, y: pr.y - 16, r: 60, tint: 'rgba(255,120,40,0.2)' });
+        if (pr.kind === 'orb') lights.push({ x: pr.x, y: pr.y - 16, r: 50, tint: 'rgba(190,140,255,0.2)' });
+      }
+      this.shade(lights, `rgba(6,10,34,${sky.dark.toFixed(3)})`, camX, camY);
+    }
+    this.terrain.drawNightGlow(ctx, v, this.time);
+  }
+
+  /** 画面を fill の色で暗くし、灯りの部分だけ切り抜いて重ねる */
+  private shade(lights: Light[], fill: string, camX: number, camY: number) {
     const g = this.darkCtx;
     const kd = this.zoom * this.dpr * this.darkScale;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, this.dark.width, this.dark.height);
-    g.fillStyle = 'rgba(4,2,10,0.94)';
+    g.fillStyle = fill;
     g.fillRect(0, 0, this.dark.width, this.dark.height);
     g.globalCompositeOperation = 'destination-out';
     for (const l of lights) {
@@ -2429,6 +2557,29 @@ export class Game {
       ctx.stroke();
       ctx.fillStyle = '#ffe8b0';
       ctx.fillText(l.text, sx, sy + 1);
+    }
+    // セールをしている店の看板に札を下げる
+    const sale = this.todaySale();
+    const shopLabel = sale && this.labels.find((l) => l.text === (sale.shop === 'shop' ? '道具屋' : '武器防具屋'));
+    if (sale && shopLabel) {
+      const { sx, sy } = this.toScreen(shopLabel.x, shopLabel.y, camX, camY);
+      const text = `SALE ${offText(sale.off)}`;
+      ctx.font = `bold 13px ${FONT}`;
+      const w = ctx.measureText(text).width + 16;
+      const y = sy + 26 + Math.sin(this.time * 3) * 2;
+      ctx.save();
+      ctx.translate(sx, y);
+      ctx.rotate(Math.sin(this.time * 2.1) * 0.04);
+      ctx.fillStyle = '#d8283a';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -11, w, 22, 4);
+      ctx.fill();
+      ctx.strokeStyle = '#ffe070';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#fff6d0';
+      ctx.fillText(text, 0, 1);
+      ctx.restore();
     }
     ctx.textBaseline = 'alphabetic';
   }

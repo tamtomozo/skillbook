@@ -1,5 +1,6 @@
 import { BOOKS, SKILLS, START_BOOK, isBook, lvUpCost } from './skills';
 import { DUNGEONS, FIELD_DUNGEONS, RANK_B, RANK_S, RUINS, rankDef } from './dungeons';
+import { START_MINUTES } from './daytime';
 
 export const HOTBAR_SIZE = 5;
 /** 持ち歩けるスキルブックの数 */
@@ -65,6 +66,8 @@ export interface SaveData {
   conquered: string[];
   /** ダンジョンごとに到達した最も深い階 */
   reached: Record<string, number>;
+  /** ゲーム内の時刻（冒険を始めてからの通算の分。何日目かと時刻はここから決まる） */
+  minutes: number;
   /** 古いセーブから移行したときの知らせ（一度表示したら消す） */
   notice?: string;
 }
@@ -99,6 +102,7 @@ export function newSave(): SaveData {
     rank: 0,
     conquered: [],
     reached: {},
+    minutes: START_MINUTES,
   };
 }
 
@@ -132,6 +136,7 @@ export function loadGame(): SaveData | null {
     const raw = JSON.parse(s) as Partial<SaveData>;
     const d = { ...newSave(), ...raw };
     d.bank = Math.max(0, Math.floor(Number(d.bank) || 0));
+    d.minutes = Math.max(0, Number(d.minutes) || START_MINUTES);
     if ((raw.ver ?? 1) < SAVE_VER) migrateV1(d, raw);
     migrateCursed(d, raw);
     if (raw.rank === undefined) migrateGuild(d);

@@ -183,6 +183,19 @@ export function buildTown() {
     }
   }
 
+  // 街灯（夜になると灯る）。道のわきの草地に立て、通り抜けられないようにする
+  const lamps: { tx: number; ty: number }[] = [
+    { tx: 12, ty: 7 },
+    { tx: 19, ty: 7 },
+    { tx: 3, ty: 7 },
+    { tx: 14, ty: 11 },
+    { tx: 9, ty: 13 },
+    { tx: 14, ty: 17 },
+    { tx: 11, ty: 19 },
+    { tx: 22, ty: 17 },
+  ];
+  for (const l of lamps) m.blockers.add(m.key(l.tx, l.ty));
+
   // 木と花を散らす
   const r = new RNG(20261124);
   const open = (x: number, y: number) => {
@@ -194,6 +207,7 @@ export function buildTown() {
     const y = r.int(2, H - 3);
     if (m.get(x, y) !== T.GRASS) continue;
     if (Math.abs(x - 13) < 3 && Math.abs(y - 10) < 3) continue;
+    if (m.blockers.has(m.key(x, y))) continue;
     let ok = true;
     for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) if (!open(x + dx, y + dy)) ok = false;
     if (!ok) continue;
@@ -220,7 +234,7 @@ export function buildTown() {
     { kind: 'bank', x: 3, y: 11, w: 6, h: 3, doorX: 5 },
   ];
 
-  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 20), guildFront: center(18, 5), labels, buildings };
+  return { map: m, start: center(13, 10), dungeonFront: center(18, 17), homeFront: center(5, 20), guildFront: center(18, 5), labels, buildings, lamps };
 }
 
 // ---------------------------------------------------------------- ダンジョン

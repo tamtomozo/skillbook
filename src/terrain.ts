@@ -1560,6 +1560,143 @@ function torch(ctx: C, x: number, y: number, time: number) {
   ctx.fill();
 }
 
+// ================================================================ 夜の町
+
+/** 建物の窓（ガラスの上端の中心）。drawHouse と同じ並び */
+function windowSpots(b: Building): { x: number; y: number }[] {
+  if (b.kind === 'ruin') return [];
+  const x0 = b.x * TILE;
+  const w = b.w * TILE;
+  const wy = (b.y + b.h) * TILE - 54 + 14;
+  const dx = (b.doorX + 0.5) * TILE;
+  return [x0 + w * 0.2, x0 + w * 0.82].filter((wx) => Math.abs(wx - dx) >= 26).map((wx) => ({ x: wx, y: wy }));
+}
+
+/** 夜、窓に灯りがともっている時間（時）。[夜に消える時刻, 朝につく時刻]。[24, 0] なら一晩じゅう */
+const WINDOW_HOURS: Record<Building['kind'], [number, number]> = {
+  shop: [23, 5],
+  bank: [21, 24],
+  home: [23, 24],
+  temple: [24, 0],
+  smithy: [24, 0],
+  guild: [24, 0],
+  ruin: [0, 24],
+};
+
+function windowLit(b: Building, clock: number): boolean {
+  const h = clock / 60;
+  const [off, on] = WINDOW_HOURS[b.kind];
+  return h >= 12 ? h < off : h >= on;
+}
+
+/** 夜の窓の灯り */
+function drawWindowGlow(ctx: C, b: Building, n: number, time: number) {
+  for (const { x: wx, y: wy } of windowSpots(b)) {
+    ctx.save();
+    ctx.globalAlpha = n;
+    if (b.kind === 'temple') {
+      // ろうそくの灯りに透けるステンドグラス
+      ctx.beginPath();
+      ctx.moveTo(wx - 9, wy + 20);
+      ctx.lineTo(wx - 9, wy + 5);
+      ctx.arc(wx, wy + 5, 9, Math.PI, 0);
+      ctx.lineTo(wx + 9, wy + 20);
+      ctx.closePath();
+      ctx.save();
+      ctx.clip();
+      const panes = ['#6a9aff', '#ff6a8a', '#ffe070', '#6ae0b8', '#b87aff', '#6a9aff'];
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = panes[(i + Math.floor(wx)) % panes.length];
+        ctx.fillRect(wx - 9 + (i % 2) * 9, wy - 4 + Math.floor(i / 2) * 8, 9, 8);
+      }
+      ctx.fillStyle = `rgba(255,240,200,${0.25 + Math.sin(time * 3 + wx) * 0.08})`;
+      ctx.fillRect(wx - 9, wy - 4, 18, 24);
+      ctx.restore();
+      ctx.strokeStyle = '#3a3020';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx, wy - 4);
+      ctx.lineTo(wx, wy + 20);
+      ctx.moveTo(wx - 9, wy + 7);
+      ctx.lineTo(wx + 9, wy + 7);
+      ctx.stroke();
+      ctx.restore();
+      glow(ctx, wx, wy + 8, 20, '#c8b0ff', 0.3 * n);
+      continue;
+    }
+    const smithy = b.kind === 'smithy';
+    const fl = Math.sin(time * (smithy ? 7 : 2.3) + wx) * (smithy ? 0.12 : 0.04);
+    const gg = ctx.createLinearGradient(0, wy, 0, wy + 16);
+    gg.addColorStop(0, smithy ? '#ffd890' : '#fff2c0');
+    gg.addColorStop(1, smithy ? '#f05a1a' : '#f0a848');
+    ctx.fillStyle = gg;
+    ctx.globalAlpha = n * Math.min(1, 0.92 + fl);
+    ctx.fillRect(wx - 9, wy, 18, 16);
+    ctx.globalAlpha = n;
+    ctx.fillStyle = '#4a2e16';
+    ctx.fillRect(wx - 0.8, wy, 1.6, 16);
+    ctx.fillRect(wx - 9, wy + 7.2, 18, 1.6);
+    if (b.kind === 'bank') {
+      ctx.fillStyle = '#2a2a30';
+      for (const bx of [-5.5, -1, 3.5]) ctx.fillRect(wx + bx, wy - 1, 1.6, 18);
+      ctx.fillRect(wx - 9, wy + 3, 18, 1.4);
+      ctx.fillRect(wx - 9, wy + 12, 18, 1.4);
+    }
+    ctx.restore();
+    glow(ctx, wx, wy + 8, 22, smithy ? '#ff7a30' : '#ffc060', (0.3 + fl) * n);
+  }
+}
+
+/** 街灯の柱（昼も夜も描く。夜の火は drawLampFlame で重ねる）。(x, y) は足元 */
+function drawLampPost(ctx: C, x: number, y: number) {
+  groundShadow(ctx, x + 2, y, 7, 2.6, 0.35);
+  ctx.fillStyle = '#2c2a30';
+  ctx.fillRect(x - 3.5, y - 4, 7, 4);
+  ctx.fillRect(x - 1.3, y - 34, 2.6, 30);
+  ctx.fillStyle = '#4a4650';
+  ctx.fillRect(x - 0.4, y - 33, 0.8, 28);
+  // 灯籠（ガラスの箱と屋根）
+  ctx.fillStyle = '#2c2a30';
+  ctx.fillRect(x - 4.5, y - 36, 9, 2);
+  ctx.fillStyle = '#b8c8cc';
+  ctx.fillRect(x - 3.5, y - 44, 7, 8);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillRect(x - 2.6, y - 43, 1.4, 5);
+  ctx.strokeStyle = '#2c2a30';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 3.5, y - 44, 7, 8);
+  ctx.fillStyle = '#2c2a30';
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y - 44);
+  ctx.lineTo(x, y - 49);
+  ctx.lineTo(x + 6, y - 44);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(x - 0.8, y - 51, 1.6, 2.5);
+}
+
+/** 街灯の火（暗さを重ねたあとに描く） */
+function drawLampFlame(ctx: C, x: number, y: number, n: number, time: number) {
+  const f = Math.sin(time * 9 + x) * 0.5 + Math.sin(time * 15 + x * 2) * 0.3;
+  glow(ctx, x, y - 40, 26, '#ffb050', (0.45 + f * 0.05) * n);
+  ctx.save();
+  ctx.globalAlpha = n;
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillRect(x - 3.5, y - 44, 7, 8);
+  ctx.fillStyle = '#ff9a30';
+  ctx.beginPath();
+  ctx.moveTo(x - 1.8, y - 37);
+  ctx.quadraticCurveTo(x - 2 + f * 0.4, y - 41, x + f * 0.6, y - 43.5);
+  ctx.quadraticCurveTo(x + 2 + f * 0.4, y - 41, x + 1.8, y - 37);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#2c2a30';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - 3.5, y - 44, 7, 8);
+  ctx.restore();
+}
+
 // ================================================================ 本体
 
 const isWall = (t: number) => t === T.WALL;
@@ -1588,6 +1725,12 @@ export class Terrain {
   cleared = false;
   /** ダンジョン：地面と壁にかける色（乗算）。ダンジョンごとの雰囲気 */
   tint = '';
+  /** 町：街灯の位置（足元） */
+  lamps: { x: number; y: number }[] = [];
+  /** 町：灯りのつき具合（0 = 昼 … 1 = 夜。ゲーム側が毎フレーム入れる） */
+  night = 0;
+  /** 町：時刻（0:00 からの分。窓の灯りが消える時刻に使う） */
+  clock = 0;
 
   constructor(
     private map: TileMap,
@@ -1907,6 +2050,10 @@ export class Terrain {
       if (t.x < v.x0 - 60 || t.x > v.x1 + 60 || t.y < v.y0 - 10 || t.y > v.y1 + 120) continue;
       out.push({ y: t.y, draw: (ctx) => drawTree(ctx, t.x, t.y, t.v) });
     }
+    for (const l of this.lamps) {
+      if (l.x < v.x0 - 20 || l.x > v.x1 + 20 || l.y < v.y0 - 10 || l.y > v.y1 + 60) continue;
+      out.push({ y: l.y, draw: (ctx) => drawLampPost(ctx, l.x, l.y) });
+    }
     for (const b of this.buildings) {
       const bottom = (b.y + b.h) * TILE;
       if (b.kind === 'ruin') {
@@ -1944,6 +2091,52 @@ export class Terrain {
     drawHouseAnim(ctx, b, time);
   }
 
+  /**
+   * 夜の町で光るもの（窓・街灯の火・ホタル・水面の星）。暗さを重ねたあとに描くので、暗がりの中で明るく見える
+   */
+  drawNightGlow(ctx: C, v: View, time: number) {
+    const n = this.night;
+    if (this.scene !== 'town' || n <= 0) return;
+    for (const b of this.buildings) {
+      if (b.kind === 'ruin' || !windowLit(b, this.clock)) continue;
+      const box = houseBox(b);
+      if (box.x > v.x1 || box.x + box.w < v.x0 || box.y > v.y1 || box.y + box.h < v.y0) continue;
+      drawWindowGlow(ctx, b, n, time);
+    }
+    for (const l of this.lamps) {
+      if (l.x < v.x0 - 40 || l.x > v.x1 + 40 || l.y < v.y0 - 10 || l.y > v.y1 + 80) continue;
+      drawLampFlame(ctx, l.x, l.y, n, time);
+    }
+    // 池のほとりのホタルと、水面にうつる星
+    const b = this.waterBox;
+    if (b.x1 > v.x0 - 60 && b.x0 < v.x1 + 60 && b.y1 > v.y0 - 60 && b.y0 < v.y1 + 60) {
+      ctx.save();
+      ctx.clip(this.water);
+      for (let i = 0; i < 9; i++) {
+        const tw = Math.max(0, Math.sin(time * (1.3 + (i % 3) * 0.4) + i * 2.1));
+        ctx.fillStyle = `rgba(230,240,255,${0.7 * n * tw})`;
+        const sx = b.x0 + 14 + ((i * 47) % (b.x1 - b.x0 - 28));
+        const sy = b.y0 + 10 + ((i * 31) % (b.y1 - b.y0 - 20));
+        ctx.fillRect(sx - 0.6 + Math.sin(time + i) * 0.8, sy - 0.6, 1.2, 1.2);
+      }
+      ctx.restore();
+      const cx = (b.x0 + b.x1) / 2;
+      const cy = (b.y0 + b.y1) / 2;
+      const rx = (b.x1 - b.x0) / 2 + 24;
+      const ry = (b.y1 - b.y0) / 2 + 18;
+      for (let i = 0; i < 12; i++) {
+        const a = i * 0.53 + time * (0.06 + (i % 4) * 0.015) * (i % 2 ? 1 : -1);
+        const x = cx + Math.cos(a) * rx * (0.9 + 0.15 * Math.sin(time * 0.7 + i)) + Math.sin(time * 1.7 + i * 3) * 6;
+        const y = cy + Math.sin(a) * ry * (0.9 + 0.15 * Math.cos(time * 0.5 + i)) + Math.cos(time * 1.3 + i * 5) * 5 - 6;
+        const blink = Math.max(0, Math.sin(time * 2.2 + i * 1.9)) ** 2;
+        if (blink < 0.05) continue;
+        glow(ctx, x, y, 7, '#d8ff70', 0.5 * n * blink);
+        ctx.fillStyle = `rgba(240,255,170,${n * blink})`;
+        ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6);
+      }
+    }
+  }
+
   /** 暗闇を照らす灯り */
   lights(v: View): Light[] {
     const out: Light[] = [];
@@ -1953,6 +2146,15 @@ export class Terrain {
     }
     for (const d of this.decor) {
       if (d.kind === 'crystal' && this.map.isExplored(d.tx, d.ty) && near(d.x, d.y, 80)) out.push({ x: d.x, y: d.y - 4, r: 80, tint: 'rgba(120,200,255,0.12)' });
+    }
+    if (this.scene === 'town' && this.night > 0) {
+      const n = this.night;
+      for (const l of this.lamps) if (near(l.x, l.y - 30, 100)) out.push({ x: l.x, y: l.y - 22, r: 100 * (0.5 + 0.5 * n), tint: `rgba(255,190,100,${0.2 * n})` });
+      for (const b of this.buildings) {
+        if (!windowLit(b, this.clock)) continue;
+        const tint = b.kind === 'smithy' ? `rgba(255,120,50,${0.22 * n})` : b.kind === 'temple' ? `rgba(200,170,255,${0.16 * n})` : `rgba(255,200,120,${0.16 * n})`;
+        for (const w of windowSpots(b)) if (near(w.x, w.y, 70)) out.push({ x: w.x, y: w.y + 14, r: 64 * (0.5 + 0.5 * n), tint });
+      }
     }
     const m = this.map;
     const { tx0, ty0, tx1, ty1 } = this.tileRange(v, 4);

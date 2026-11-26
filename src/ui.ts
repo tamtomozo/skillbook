@@ -4,6 +4,7 @@ import { MAX_HP, MAX_MP } from './constants';
 import { FIELD_DUNGEONS, RANKS, RANK_B, RUINS, dungeonById, rankDef, trialFor, type DungeonDef } from './dungeons';
 import { BOOKS, BOOK_KIND_NAME, CURSED_NAME, CURSE_COLOR, CURSE_POWER, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, pinchValueText, lvUpCost, pinchText, purifyPrice, sellPrice, spSpent, type BookKind, type Stat } from './skills';
 import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type CursedBook } from './state';
+import { PHASE_ICON, PHASE_NAME, clockText, offText, phaseOf, type SaleTarget } from './daytime';
 import type { BookDef } from './skills';
 import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStat, weaponStatText, type Recipe } from './equipment';
 
@@ -53,6 +54,8 @@ export class UI {
   private statEls: Record<Stat, HTMLElement>;
   private pinchEl: HTMLElement;
   private stanceEl: HTMLElement;
+  private clockEl: HTMLElement;
+  private saleEl: HTMLElement;
   private last = new WeakMap<HTMLElement, Record<string, string>>();
 
   constructor(private game: Game, root: HTMLElement) {
@@ -63,6 +66,8 @@ export class UI {
     root.innerHTML = `
       <div class="hud">
         <div class="name"><span class="rank"></span><span class="loc"></span></div>
+        <div class="clock"></div>
+        <div class="sale"></div>
         <div class="bar hp"><div class="fill"></div><span class="lbl">HP</span><span class="txt"></span></div>
         <div class="bar mp"><div class="fill"></div><span class="lbl">MP</span><span class="txt"></span></div>
         <div class="stats"><span class="exp"></span><span class="sp"></span><span class="gold"></span></div>
@@ -91,6 +96,8 @@ export class UI {
     this.statEls = { atk: q('.params .atk'), mag: q('.params .mag'), def: q('.params .def'), luck: q('.params .luck') };
     this.pinchEl = q('.hud .pinch');
     this.stanceEl = q('.hud .stance');
+    this.clockEl = q('.hud .clock');
+    this.saleEl = q('.hud .sale');
     this.potionEl = q('.cnt.potions');
     this.etherEl = q('.cnt.ethers');
     this.logEl = q('.log');
@@ -137,6 +144,10 @@ export class UI {
     this.text(this.mpText, `${Math.floor(p.mp)} / ${MAX_MP}`);
     const dg = g.dungeon;
     this.text(this.locEl, g.scene === 'town' ? 'はじまりの町' : g.scene === 'home' ? 'わが家' : !dg ? '' : dg.trial && g.floor >= dg.depths.length ? `${dg.trial.name}の間` : `${dg.name} 地下${g.floor}階`);
+    const ph = phaseOf(d.minutes);
+    this.text(this.clockEl, `${PHASE_ICON[ph]} ${g.day}日目 ${clockText(d.minutes)}（${PHASE_NAME[ph]}）`);
+    const sale = g.todaySale();
+    this.text(this.saleEl, sale ? `🏷️ ${sale.shop === 'shop' ? '道具屋' : '武器防具屋'}：${sale.name} ${offText(sale.off)}` : '');
     const rk = rankDef(d.rank);
     this.text(this.rankEl, `ランク ${rk.name}`);
     this.put(this.rankEl, 'c', rk.color, (v) => this.rankEl.style.setProperty('--rc', v));
@@ -267,7 +278,9 @@ export class UI {
           <li>体力・MPの上限は<b>100で固定</b>。スキルブックと装備で強くなろう。</li>
           <li><b>武器防具屋</b>では武器（剣・弓・杖・盾）と鎧を売っている。剣・弓は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、弓なら矢、杖なら魔力の弾、盾なら盾で殴る。危険度の高い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。鉱石はダンジョンの壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
           <li>魔物は倒すと、ときどき<b>素材</b>（スライムゼリー・コウモリの翼・ゴブリンの牙など）を落とす。武器防具屋の<b>装備作成</b>タブで、素材と鉱石から<b>店では買えない特別な武器と防具</b>を作れる。作った装備には追加効果がある。</li>
-          <li>わが家のベッドで休むと全回復＆セーブ。倒れると所持金の半分を失って町へ戻される。</li>
+          <li>わが家のベッドで休むと全回復＆セーブ。夕方6時から朝6時のあいだにベッドに入ると、次の朝まで眠る。倒れると所持金の半分を失って町へ戻される。</li>
+          <li>町には<b>1日</b>の流れがある（現実の12分で1日。メニューを開いているあいだは時間が止まる）。朝焼け・夕焼けに染まり、夜は街灯や窓に灯りがともる。日付は夜明け（5時）に変わる。</li>
+          <li>ときどき<b>道具屋</b>や<b>武器防具屋</b>で<b>割引セール</b>がある。セールはその日限りで、夜が明けると入れ替わる。今日のセールは画面左上に出る。</li>
           <li><b>銀行</b>に預けたゴールドは、倒れても減らない。ダンジョンで階段を降りるたびに少し利息もつく。買い物をするときは引き出そう。</li>
         </ul>
         <div class="btns"><button data-act="close">閉じる</button></div>
@@ -594,6 +607,25 @@ export class UI {
     );
   }
 
+  // ---------------------------------------------------------------- セール
+
+  /** 値段の表示。セールで安くなっていれば元の値段に線を引く */
+  private priceHtml(target: SaleTarget, base: number): string {
+    const now = this.game.priceOf(target, base);
+    return now < base ? `<s class="was">${base}</s> <b class="salep">${now}</b> G` : `${base} G`;
+  }
+
+  /** お店の上に出す今日のセールの知らせ */
+  private saleBanner(shop: 'shop' | 'smithy'): string {
+    const s = this.game.todaySale();
+    if (!s) return '';
+    if (s.shop !== shop) {
+      const other = s.shop === 'shop' ? '道具屋' : '武器防具屋';
+      return `<p class="salebar other">🏷️ 今日は${other}で${s.name}が${offText(s.off)}らしい。</p>`;
+    }
+    return `<p class="salebar">🏷️ 本日限りのセール！ <b>${s.name}</b>が<b>${offText(s.off)}</b>！</p>`;
+  }
+
   // ---------------------------------------------------------------- 道具屋
 
   showShop() {
@@ -608,7 +640,7 @@ export class UI {
         (it) => `<div class="srow">
           <div class="sicon">${it.icon}</div>
           <div class="sinfo"><div class="sname">${it.name} <small>所持 ${it.have}</small></div><div class="sdesc">${it.desc}</div></div>
-          <div class="sact"><button data-act="buy" data-arg="${it.id}" ${d.gold >= it.price ? '' : 'disabled'}>${it.price} G</button></div>
+          <div class="sact"><button data-act="buy" data-arg="${it.id}" ${d.gold >= g.priceOf('item', it.price) ? '' : 'disabled'}>${this.priceHtml('item', it.price)}</button></div>
         </div>`,
       )
       .join('');
@@ -619,7 +651,7 @@ export class UI {
           ? '<span class="done">購入済み</span>'
           : locked
             ? `<span class="lock">危険度${b.minFloor}の階に<br>到達で入荷</span>`
-            : `<button data-act="buybook" data-arg="${b.id}" ${d.gold >= b.price ? '' : 'disabled'}>${b.price} G</button>`;
+            : `<button data-act="buybook" data-arg="${b.id}" ${d.gold >= g.priceOf('book', b.price) ? '' : 'disabled'}>${this.priceHtml('book', b.price)}</button>`;
         return `<div class="srow ${owned ? 'learned' : ''}">
           <div class="sicon book" style="--c:${b.color}">📕</div>
           <div class="sinfo"><div class="sname">${b.name}<span class="ktag ${b.kind}">${bookTag(b)}</span></div><div class="sdesc">${b.desc}<br><small>${b.kind === 'tech' ? '収録' : '効果'}: ${locked ? '？？？' : bookSummary(b)}</small></div></div>
@@ -676,6 +708,7 @@ export class UI {
       'shop',
       `<div class="panel shop-panel">
         <div class="phead"><h2>🏪 道具屋</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
+        ${this.saleBanner('shop')}
         <p class="npc">${this.shopTab === 'buy' ? '店主「いらっしゃい！ ダンジョンに潜るなら準備は万全にな。技の書もパラメタの書も揃ってるぜ。」' : '店主「本の買い取りかい？ ダブった本なら、いい値で引き取るぜ。」'}</p>
         ${tabs}
         <div class="shop-list">${this.shopTab === 'buy' ? buyList : sellList}
@@ -750,7 +783,7 @@ export class UI {
                 ? `<button class="sub" data-act="equip" data-arg="${it.kind}:${it.id}">装備する</button>`
                 : locked
                   ? `<span class="lock">危険度${it.minFloor}の階に<br>到達で入荷</span>`
-                  : `<button data-act="buyeq" data-arg="${it.kind}:${it.id}" ${d.gold >= it.price ? '' : 'disabled'}>${it.price} G</button>`;
+                  : `<button data-act="buyeq" data-arg="${it.kind}:${it.id}" ${d.gold >= g.priceOf(it.kind, it.price) ? '' : 'disabled'}>${this.priceHtml(it.kind, it.price)}</button>`;
             return `<div class="srow ${equipped ? 'equipped' : ''}">
               <div class="sicon">${locked ? '❔' : it.icon}</div>
               <div class="sinfo"><div class="sname">${locked ? '？？？' : eqName(it.name, plus)}<span class="eqstat">${it.stat(plus)}</span></div><div class="sdesc">${locked ? '腕のいい職人が、まだ仕上げている途中だ。' : it.desc}</div></div>
@@ -778,7 +811,7 @@ export class UI {
                     ? `<button class="sub" data-act="equip" data-arg="${it.kind}:${it.id}">装備する</button>`
                     : locked
                       ? `<span class="lock">危険度${it.minFloor}の階に到達で<br>作り方が分かる</span>`
-                      : `<button data-act="craft" data-arg="${it.kind}:${it.id}" ${g.canCraft(r) ? '' : 'disabled'}>作る<br><small>${r.gold} G</small></button>`;
+                      : `<button data-act="craft" data-arg="${it.kind}:${it.id}" ${g.canCraft(r) ? '' : 'disabled'}>作る<br><small>${this.priceHtml('craft', r.gold)}</small></button>`;
                 const body = locked
                   ? '<div class="sdesc">親方「こいつの作り方は、もっと危ない階の魔物を見てからだな。」</div>'
                   : `<div class="sdesc">${it.desc}<br><span class="eqfx">✨ ${it.fx ?? ''}</span>${owns(it) ? '' : `<div class="recipe">${needs}</div>`}</div>`;
@@ -828,7 +861,8 @@ export class UI {
           .map((it) => {
             const plus = g.plusOf(it.id);
             const max = plus >= MAX_PLUS;
-            const cost = forgeCost(it.price, plus);
+            const base = forgeCost(it.price, plus);
+            const cost = g.priceOf('forge', base);
             const need = forgeOre(plus);
             const have = g.oreOf(need.ore.id);
             const enough = have >= need.n;
@@ -838,7 +872,7 @@ export class UI {
               : `${it.stat(plus)} → <b>${it.stat(plus + 1)}</b><span class="oreneed ${enough ? 'ok' : 'short'}">${need.ore.icon} ${need.ore.name} ${have}/${need.n}</span>`;
             const act = max
               ? '<span class="done">最大まで<br>鍛えた</span>'
-              : `<button data-act="forge" data-arg="${it.kind}:${it.id}" ${d.gold >= cost && enough ? '' : 'disabled'}>鍛える <small>${cost} G</small></button>`;
+              : `<button data-act="forge" data-arg="${it.kind}:${it.id}" ${d.gold >= cost && enough ? '' : 'disabled'}>鍛える <small>${this.priceHtml('forge', base)}</small></button>`;
             const key = `${it.kind}:${it.id}`;
             return `<div class="srow forge-row ${wears(it) ? 'equipped' : ''} ${forged === key ? 'forged' : ''}">
               <div class="sicon">${it.icon}</div>
@@ -854,6 +888,7 @@ export class UI {
       `<div class="panel shop-panel">
         <div class="phead"><h2>⚒️ 武器防具屋</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
         ${tabs}
+        ${this.saleBanner('smithy')}
         <p class="npc">${npc}</p>
         ${eqnow}
         ${this.smithyTab === 'sell' ? '<p class="note">買い取り値は、売り場の値段と鍛えるのに払った代金を合わせた半額。装備中の品は売れない。</p>' : ''}
