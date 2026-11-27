@@ -35,6 +35,7 @@ type ModalKind = 'title' | 'menu' | 'shop' | 'entrance' | 'help' | 'death' | 'cl
 const CONTROLS = `
 <table class="ctrl">
   <tr><td>WASD / 矢印</td><td>移動</td></tr>
+  <tr><td>Shift ＋ 移動</td><td>向きを変えずに平行移動</td></tr>
   <tr><td>Space / J</td><td>攻撃（長押しで連続攻撃）</td></tr>
   <tr><td>1 〜 5</td><td>ホットバーのスキルを使う</td></tr>
   <tr><td>E / Enter</td><td>調べる・宝箱・階段・お店</td></tr>

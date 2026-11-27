@@ -193,4 +193,6 @@ export interface Vein {
   /** あと何回たたくと崩れるか */
   hits: number;
   mined: boolean;
+  /** たたかれて揺れている残り時間（秒） */
+  shake?: number;
 }

@@ -29,6 +29,8 @@ interface Interact {
 
 const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+/** 鉱脈をたたいたときに鉱脈が揺れる時間（秒） */
+const VEIN_SHAKE = 0.25;
 
 function moveBox(map: TileMap, b: Box, dx: number, dy: number) {
   if (dx !== 0) {
@@ -810,7 +812,8 @@ export class Game {
     v.hits--;
     this.burst(vx, vy - 12, '#9a90a8', 6, 70);
     this.burst(vx, vy - 12, ore.color[0], 4, 90);
-    this.shake = Math.max(this.shake, 0.1);
+    // 画面ではなく鉱脈だけを揺らす
+    v.shake = VEIN_SHAKE;
     if (v.hits > 0) {
       this.float(vx, vy - 34, 'カン！', '#e8e0d0');
       return;
@@ -923,6 +926,7 @@ export class Game {
     this.time += dt;
     if (this.bannerT > 0) this.bannerT -= dt;
     if (this.shake > 0) this.shake -= dt;
+    for (const v of this.veins) if (v.shake) v.shake = Math.max(0, v.shake - dt);
 
     const inp = this.input;
     if (this.ui.modalOpen) {
@@ -968,11 +972,14 @@ export class Game {
       const l = Math.hypot(mx, my);
       mx /= l;
       my /= l;
-      p.aimX = mx;
-      p.aimY = my;
-      if (mx !== 0) p.facing = mx > 0 ? 1 : -1;
-      // 上下の入力が強いときは正面/背中、それ以外（斜めを含む）は横向き
-      p.dir = Math.abs(my) > Math.abs(mx) ? (my > 0 ? 'down' : 'up') : 'side';
+      // Shift を押している間は向き（と攻撃の向き）を固定したまま平行移動する
+      if (!inp.isDown('ShiftLeft', 'ShiftRight')) {
+        p.aimX = mx;
+        p.aimY = my;
+        if (mx !== 0) p.facing = mx > 0 ? 1 : -1;
+        // 上下の入力が強いときは正面/背中、それ以外（斜めを含む）は横向き
+        p.dir = Math.abs(my) > Math.abs(mx) ? (my > 0 ? 'down' : 'up') : 'side';
+      }
       p.anim += dt * (p.speedBuff > 0 ? 1.7 : 1);
     }
     // 夜翼の外套で少し速くなる
@@ -994,7 +1001,7 @@ export class Game {
     if (this.has('regen')) p.hp = Math.min(MAX_HP, p.hp + 0.6 * dt);
 
     if (p.speedBuff > 0 && p.moving && Math.random() < 0.4) {
-      this.effects.push({ type: 'particle', x: p.x - p.aimX * 8, y: p.y + 4, t: 0, dur: 0.3, vx: -p.aimX * 40, vy: -20, color: '#e8f4ff', size: 2 });
+      this.effects.push({ type: 'particle', x: p.x - mx * 8, y: p.y + 4, t: 0, dur: 0.3, vx: -mx * 40, vy: -20, color: '#e8f4ff', size: 2 });
     }
 
     if (inp.isDown('Space', 'KeyJ')) this.attack();
@@ -2181,7 +2188,10 @@ export class Game {
       const vy = (v.ty + 0.5) * TILE + 8;
       if (!this.map.isExplored(v.tx, v.ty) || !inView(vx, vy, 40)) continue;
       const ore = oreById(v.ore);
-      list.push({ y: vy, draw: () => drawOreVein(ctx, vx, vy, ore.color, v.mined ? 0 : v.hits, this.time) });
+      // たたいた直後は左右に小刻みに揺れて、すぐ収まる
+      const k = (v.shake ?? 0) / VEIN_SHAKE;
+      const sx = k > 0 ? Math.sin(k * 40) * 3 * k : 0;
+      list.push({ y: vy, draw: () => drawOreVein(ctx, vx + sx, vy, ore.color, v.mined ? 0 : v.hits, this.time) });
     }
 
     list.sort((a, b) => a.y - b.y);
