@@ -1,19 +1,17 @@
-/** 武器防具屋で買える装備。剣・弓は攻撃力、杖は魔力、盾と防具は防御力を上げる */
+/** 武器防具屋で買える装備。剣は攻撃力、杖は魔力、盾と防具は防御力を上げる */
 import type { Stat } from './skills';
 
-/** 武器の種類。剣・弓・魔術・盾の技は、それぞれ剣・弓・杖・盾を装備しているときだけ使える */
-export type WeaponType = 'sword' | 'bow' | 'staff' | 'shield';
-export const WEAPON_TYPE_NAME: Record<WeaponType, string> = { sword: '剣', bow: '弓', staff: '杖', shield: '盾' };
-export const WEAPON_TYPE_ICON: Record<WeaponType, string> = { sword: '⚔️', bow: '🏹', staff: '🪄', shield: '🛡️' };
+/** 武器の種類。剣・魔術・盾の技は、それぞれ剣・杖・盾を装備しているときだけ使える */
+export type WeaponType = 'sword' | 'staff' | 'shield';
+export const WEAPON_TYPE_NAME: Record<WeaponType, string> = { sword: '剣', staff: '杖', shield: '盾' };
+export const WEAPON_TYPE_ICON: Record<WeaponType, string> = { sword: '⚔️', staff: '🪄', shield: '🛡️' };
 /** 武器の種類ごとの主なパラメタ（鍛冶で伸びるのはこれ） */
-export const WEAPON_MAIN: Record<WeaponType, Stat> = { sword: 'atk', bow: 'atk', staff: 'mag', shield: 'def' };
+export const WEAPON_MAIN: Record<WeaponType, Stat> = { sword: 'atk', staff: 'mag', shield: 'def' };
 
 /** 作成した武器の追加効果 */
 export type WeaponEffect =
   /** 敵に攻撃を当てるたびに体力が回復する */
   | 'drain'
-  /** 通常攻撃の矢が敵を貫通する */
-  | 'pierce'
   /** 敵を倒すとMPが回復する */
   | 'soul'
   /** 体当たりしてきた敵にダメージを返す */
@@ -21,7 +19,6 @@ export type WeaponEffect =
 
 export const WEAPON_EFFECT_TEXT: Record<WeaponEffect, string> = {
   drain: '敵に攻撃を当てるたびに体力 +2',
-  pierce: '通常攻撃の矢が敵を貫通する',
   soul: '敵を倒すと MP +5',
   thorns: '体当たりしてきた敵に、防御力ぶんのダメージを返す',
 };
@@ -57,7 +54,7 @@ export interface WeaponDef {
   id: string;
   name: string;
   type: WeaponType;
-  /** 攻撃力の加算（通常攻撃と剣・弓・盾の技の威力に効く） */
+  /** 攻撃力の加算（通常攻撃と剣・盾の技の威力に効く） */
   atk: number;
   /** 魔力の加算（杖） */
   mag?: number;
@@ -96,9 +93,6 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'steel', name: '鋼の剣', type: 'sword', atk: 4, up: 1, price: 180, minFloor: 0, icon: '⚔️', desc: '町の鍛冶屋が鍛えた、よく切れる剣。' },
   { id: 'mithril', name: 'ミスリルの剣', type: 'sword', atk: 9, up: 2, price: 550, minFloor: 3, icon: '✨', desc: '青白く光る軽い魔法銀の剣。' },
   { id: 'dragon', name: '竜牙の剣', type: 'sword', atk: 15, up: 3, price: 1400, minFloor: 6, icon: '🐉', desc: '竜の牙を削り出した、燃えるような刃。' },
-  { id: 'shortbow', name: '狩人の弓', type: 'bow', atk: 2, up: 1, price: 160, minFloor: 0, icon: '🏹', desc: '森の狩人が使う小ぶりな弓。離れた敵を射抜ける。' },
-  { id: 'longbow', name: 'イチイの長弓', type: 'bow', atk: 7, up: 2, price: 520, minFloor: 3, icon: '🎯', desc: 'よくしなるイチイの木から削り出した長弓。' },
-  { id: 'spiritbow', name: '精霊樹の弓', type: 'bow', atk: 13, up: 3, price: 1350, minFloor: 6, icon: '🌳', desc: '精霊の宿る大樹の枝で作られた、淡く光る弓。' },
   { id: 'oakstaff', name: '樫の杖', type: 'staff', atk: 0, mag: 4, up: 1, price: 150, minFloor: 0, icon: '🪄', desc: '魔法学院の見習いが使う、緑の石をはめた杖。' },
   { id: 'magestaff', name: '魔導士の杖', type: 'staff', atk: 0, mag: 10, up: 2, price: 520, minFloor: 3, icon: '🔷', desc: '青い魔石が魔力を増幅する、熟練の魔導士の杖。' },
   { id: 'sagestaff', name: '賢者の杖', type: 'staff', atk: 0, mag: 17, up: 3, price: 1350, minFloor: 6, icon: '🔮', desc: '大賢者が遺した、紫の宝珠が輝く杖。' },
@@ -107,7 +101,6 @@ export const WEAPONS: WeaponDef[] = [
   { id: 'dragonshield', name: '竜鱗の盾', type: 'shield', atk: 9, def: 18, up: 3, price: 1300, minFloor: 6, icon: '🐲', desc: '竜の鱗を張り合わせた、炎をも弾く盾。' },
   // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor はレシピを教えてもらえる危険度）
   { id: 'vampblade', name: '吸血の剣', type: 'sword', atk: 11, up: 2, price: 900, minFloor: 3, icon: '🩸', desc: 'コウモリの翼を鍔に巻いた紅い剣。斬るたびに命を吸う。', effect: 'drain', craft: { gold: 300, ores: { iron: 4 }, mats: { wing: 6, bone: 3 } } },
-  { id: 'bonebow', name: '白骨の弓', type: 'bow', atk: 10, up: 2, price: 880, minFloor: 3, icon: '🦴', desc: '古い骨を削り、牙の矢じりを添えた弓。矢が敵を突き抜ける。', effect: 'pierce', craft: { gold: 300, ores: { iron: 3 }, mats: { bone: 6, fang: 4 } } },
   { id: 'soulstaff', name: '霊魂の杖', type: 'staff', atk: 0, mag: 14, up: 2, price: 950, minFloor: 4, icon: '👻', desc: '霊気の結晶を閉じこめた杖。倒した敵の魂を魔力に変える。', effect: 'soul', craft: { gold: 350, ores: { silver: 2 }, mats: { ecto: 5, jelly: 6 } } },
   { id: 'golemshield', name: '巨像の盾', type: 'shield', atk: 8, def: 16, up: 3, price: 1200, minFloor: 6, icon: '🗿', desc: 'ゴーレムの核を埋めこんだ石の大盾。表面の牙が、ぶつかってきた敵を傷つける。', effect: 'thorns', craft: { gold: 500, ores: { silver: 3 }, mats: { core: 3, fang: 5 } } },
 ];

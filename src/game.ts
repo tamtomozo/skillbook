@@ -14,7 +14,7 @@ import {
   type Vein,
 } from './entities';
 import { ARMORS, MAX_PLUS, WEAPONS, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, matDropRate, matOfEnemy, oreById, rollOre, weaponById, weaponStat, type ArmorEffect, type Recipe, type WeaponEffect, type WeaponType } from './equipment';
-import { BOOKS, CURSE_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, purifyPrice, type BookDef, type Stat } from './skills';
+import { BOOKS, CURSE_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, purifyPrice, type Stat } from './skills';
 import { HOTBAR_SIZE, MAX_CARRY, bankInterest, loadGame, newSave, saveGame, spCost, type SaveData } from './state';
 import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
 import { Terrain, type Light, type Sortable, type View } from './terrain';
@@ -53,7 +53,7 @@ export class Game {
 
   data: SaveData = newSave();
   scene: 'town' | 'dungeon' | 'home' = 'town';
-  /** わが家の家具（本棚・ベッドを調べるのに使う） */
+  /** わが家の家具（本棚・ベッド・BOXを調べるのに使う） */
   private furniture: Furniture[] = [];
   /** いま潜っているダンジョン（町・わが家では null） */
   dungeon: DungeonDef | null = null;
@@ -71,7 +71,6 @@ export class Game {
   veins: Vein[] = [];
   cooldowns: Record<string, number> = {};
   started = false;
-  detected = false;
 
   private camX = 0;
   private camY = 0;
@@ -88,8 +87,6 @@ export class Game {
   private reflectT = 0;
   private sanctT = 0;
   private bulwarkT = 0;
-  /** 発動中の窮地の書（発動した瞬間を知らせるのに使う） */
-  private pinchOn = '';
   private bannerText = '';
   private bannerT = 0;
   private interact: Interact | null = null;
@@ -210,8 +207,8 @@ export class Game {
     saveGame(this.data);
     this.ui.log('トレジャーハンターの冒険が始まった！', '#ffd84a');
     this.ui.log('[K] でスキルブックを開き、SPを使って本のレベルを上げよう。本はLv0（効果なし）から始まる。');
-    this.ui.log('スキルブックは「パラメタ」「技」「窮地」の3系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
-    this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。`);
+    this.ui.log('スキルブックは「パラメタ」と「技」の2系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
+    this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。BOXには使っていない装備がしまってあり、そこで持ち替えられる。`);
     this.startClock();
   }
 
@@ -233,7 +230,7 @@ export class Game {
     }
   }
 
-  /** スキルが使えるか：習得済みで、その本をかばんに入れて持ち歩き、剣・弓の技ならその武器を装備していること */
+  /** スキルが使えるか：習得済みで、その本をかばんに入れて持ち歩き、技の系統に合った武器（剣・杖・盾）を装備していること */
   has(id: string): boolean {
     return this.skillBlock(id) === null;
   }
@@ -397,7 +394,7 @@ export class Game {
 
   // ---------------------------------------------------------------- パラメタ
 
-  /** 装備と、かばんに入れたパラメタの書から決まる値（窮地の効果は含まない） */
+  /** 装備と、かばんに入れたパラメタの書から決まる値（技や状態の効果は含まない） */
   baseStat(s: Stat): number {
     const d = this.data;
     let v = 0;
@@ -410,29 +407,10 @@ export class Game {
     return v;
   }
 
-  /** いま発動している窮地の書（かばんに入っていて、体力がしきい値以下） */
-  activePinch(): BookDef[] {
-    const hp = this.player.hp / MAX_HP;
-    if (hp <= 0) return [];
-    return this.data.carried.map(bookById).filter((b) => b.pinch && hp <= b.pinch.hp && this.bookLv(b.id) >= 1);
-  }
-
-  /** 窮地の書の、いまのレベルでの効果量 */
-  pinchValue(b: BookDef): number {
-    const v = b.pinch?.values ?? [0];
-    return v[Math.max(1, Math.min(v.length, this.bookLv(b.id))) - 1];
-  }
-
-  /** 窮地の効果を含めたパラメタ。％アップは装備と本の値に掛かり、加算は相手の元の値から足す */
+  /** 技や状態の効果を含めたパラメタ */
   stat(s: Stat): number {
     const base = this.baseStat(s);
     let v = base;
-    for (const b of this.activePinch()) {
-      const e = b.pinch!.effect;
-      const val = this.pinchValue(b);
-      if (e.kind === 'boost' && e.stat === s) v += base * val;
-      if (e.kind === 'convert' && e.to === s) v += this.baseStat(e.from) * val;
-    }
     for (const st of this.stances) if (STANCES[st].boost === s) v += base * STANCE_BOOST;
     if (s === 'atk' && this.has('fortress')) v += this.baseStat('def') * 0.3;
     if (s === 'def' && this.ironwallT > 0) v *= 2;
@@ -465,7 +443,6 @@ export class Game {
     this.pickups = [];
     this.chests = [];
     this.veins = [];
-    this.detected = false;
     this.flameT = 0;
     this.bladesT = 0;
     this.ironwallT = this.reflectT = this.sanctT = this.bulwarkT = 0;
@@ -718,7 +695,7 @@ export class Game {
     saveGame(this.data);
   }
 
-  /** 武器防具屋：買ってそのまま装備する */
+  /** 武器防具屋：買ってそのまま装備する（外した装備はわが家のBOXへ） */
   buyEquip(kind: 'weapon' | 'armor', id: string) {
     const d = this.data;
     const def = kind === 'weapon' ? WEAPONS.find((w) => w.id === id) : ARMORS.find((a) => a.id === id);
@@ -728,7 +705,15 @@ export class Game {
     d.gold -= price;
     owned.push(id);
     this.ui.log(`${def.name}を購入した！`, '#ffd84a');
+    this.wearNew(kind, id);
+  }
+
+  /** 手に入れた装備をその場で身につけ、外した装備はわが家のBOXへ送る */
+  private wearNew(kind: 'weapon' | 'armor', id: string) {
+    const d = this.data;
+    const prev = kind === 'weapon' ? weaponById(d.weapon) : armorById(d.armor);
     this.equip(kind, id);
+    this.ui.log(`外した${eqName(prev.name, this.plusOf(prev.id))}は、わが家のBOXにしまった。`);
   }
 
   /** 武器防具屋に装備を売る。装備中の品と最初の装備は売れない。鍛えた分（+n）はなくなる */
@@ -781,7 +766,7 @@ export class Game {
     return true;
   }
 
-  /** 鍛冶場：鉱石と魔物の素材から、作成専用の武器・防具を作ってそのまま装備する */
+  /** 鍛冶場：鉱石と魔物の素材から、作成専用の武器・防具を作ってそのまま装備する（外した装備はBOXへ） */
   craftEquip(kind: 'weapon' | 'armor', id: string): boolean {
     const d = this.data;
     const def = kind === 'weapon' ? WEAPONS.find((x) => x.id === id) : ARMORS.find((x) => x.id === id);
@@ -793,7 +778,7 @@ export class Game {
     for (const [k, n] of Object.entries(r.mats)) d.mats[k] -= n;
     owned.push(id);
     this.ui.log(`親方が${def.name}を作り上げた！`, '#ffb060');
-    this.equip(kind, id);
+    this.wearNew(kind, id);
     return true;
   }
 
@@ -832,7 +817,7 @@ export class Game {
     this.ui.log(`${ore.name}の鉱脈を掘りあてた！`, ore.color[0]);
   }
 
-  /** 持っている武器・防具に持ち替える */
+  /** 持っている武器・防具に持ち替える（ふだんはわが家のBOXから） */
   equip(kind: 'weapon' | 'armor', id: string) {
     const d = this.data;
     if (!(kind === 'weapon' ? d.weapons : d.armors).includes(id)) return;
@@ -1038,7 +1023,6 @@ export class Game {
       }
     }
     this.updateShieldArts(dt);
-    this.checkPinch();
   }
 
   /** 鉄壁・反射の盾・聖域・奥義不落の時間経過 */
@@ -1076,22 +1060,6 @@ export class Game {
     }
   }
 
-  /** 窮地の書が発動した瞬間に知らせる */
-  private checkPinch() {
-    const p = this.player;
-    const on = this.activePinch();
-    const key = on.map((b) => b.id).join(',');
-    if (key === this.pinchOn) return;
-    const before = this.pinchOn.split(',');
-    for (const b of on) {
-      if (before.includes(b.id)) continue;
-      this.float(p.x, p.y - 48, `${b.name} 発動！`, '#ff7070');
-      this.ring(p.x, p.y, 10, 50, '#ff5050', 0.4);
-      this.burst(p.x, p.y - 14, '#ff6060', 12, 70);
-    }
-    this.pinchOn = key;
-  }
-
   private usePotion() {
     const p = this.player;
     if (this.data.potions <= 0) return this.float(p.x, p.y - 34, '回復薬がない', '#ff9090');
@@ -1115,15 +1083,6 @@ export class Game {
   private attack() {
     const p = this.player;
     if (p.attackCd > 0) return;
-    if (this.weaponType === 'bow') {
-      // 弓：矢を放つ
-      p.attackCd = this.has('rapid') ? 0.28 : 0.42;
-      this.swing(0.26);
-      // 白骨の弓：通常攻撃の矢が敵を貫通する
-      const pierce = this.weaponEffect === 'pierce';
-      this.shootArrow(Math.atan2(p.aimY, p.aimX), 8 + this.atk, 420, pierce ? { pierce: true, tint: '#f0ead0' } : {});
-      return;
-    }
     if (this.weaponType === 'staff') {
       // 杖：魔力の弾を放つ
       p.attackCd = 0.38;
@@ -1152,28 +1111,6 @@ export class Game {
     for (const e of this.enemies) {
       if (e.alive && dist(ax, ay, e.x, e.y) < 22 + e.w / 2) this.hitEnemy(e, dmg, p.x, p.y, 220);
     }
-  }
-
-  /** 矢を放つ（ang の方向へ） */
-  private shootArrow(ang: number, dmg: number, speed: number, opt: { pierce?: boolean; tint?: string; life?: number } = {}) {
-    const p = this.player;
-    const vx = Math.cos(ang);
-    const vy = Math.sin(ang);
-    const life = opt.life ?? 0.6;
-    this.projectiles.push({
-      x: p.x + vx * 10,
-      y: p.y + vy * 10,
-      vx: vx * speed,
-      vy: vy * speed,
-      r: opt.pierce ? 7 : 5,
-      dmg,
-      life,
-      maxLife: life,
-      from: 'player',
-      kind: 'arrow',
-      hits: opt.pierce ? [] : undefined,
-      tint: opt.tint,
-    });
   }
 
   // ================================================================ スキル
@@ -1293,75 +1230,6 @@ export class Game {
         this.ring(p.x, p.y, 10, 90, '#ffffff', 0.4);
         this.shake = 0.2;
         return true;
-      // ---------------------------------------------------------------- 弓（攻撃力）
-      case 'triple':
-        this.swing(0.26);
-        for (const da of [-0.22, 0, 0.22]) this.shootArrow(aim + da, 8 + this.atk * 0.8, 420);
-        return true;
-      case 'pierce':
-        this.swing(0.3);
-        this.shootArrow(aim, 18 + this.atk * 1.3, 560, { pierce: true, tint: '#8ad0ff', life: 0.7 });
-        this.ring(p.x + p.aimX * 12, p.y + p.aimY * 12, 4, 20, '#8ad0ff', 0.25);
-        return true;
-      case 'bomb':
-        this.swing(0.3);
-        this.projectiles.push({ x: p.x + p.aimX * 10, y: p.y + p.aimY * 10, vx: p.aimX * 380, vy: p.aimY * 380, r: 6, dmg: 30 + this.atk * 0.8, life: 0.6, maxLife: 0.6, from: 'player', kind: 'bomb', tint: '#ff8030' });
-        return true;
-      case 'smoke': {
-        for (let i = 0; i < 14; i++) {
-          this.effects.push({ type: 'smoke', x: p.x + rand(-50, 50), y: p.y + rand(-40, 30), t: 0, dur: rand(0.8, 1.4), r0: rand(10, 18), r1: rand(26, 40), color: '#c8c8d0' });
-        }
-        let n = 0;
-        for (const e of this.enemies) {
-          if (e.alive && dist(p.x, p.y, e.x, e.y) < 130) {
-            e.stun = 3;
-            n++;
-          }
-        }
-        if (n > 0) this.float(p.x, p.y - 34, `${n}体ひるんだ！`, '#e0e0e0');
-        return true;
-      }
-      case 'detect': {
-        if (this.scene !== 'dungeon') {
-          this.float(p.x, p.y - 34, 'ここに宝の気配はない', '#cccccc');
-          return false;
-        }
-        this.detected = true;
-        this.ring(p.x, p.y, 10, 420, '#ffd84a', 0.9);
-        const left = this.chests.filter((c) => !c.opened).length;
-        this.ui.log(`鷹の目で宝のありかを見抜いた！ 残りの宝箱: ${left}個`, '#ffd84a');
-        return true;
-      }
-      case 'shadowstep': {
-        const ox = p.x;
-        const oy = p.y;
-        for (let s = 0; s < 28; s++) {
-          const nx = p.x + p.aimX * 4;
-          const ny = p.y + p.aimY * 4;
-          if (this.map.boxHits(nx, ny, p.w, p.h)) break;
-          p.x = nx;
-          p.y = ny;
-        }
-        this.effects.push({ type: 'after', x: ox, y: oy, t: 0, dur: 0.4, facing: p.facing, dir: p.dir });
-        this.burst(ox, oy - 12, '#6a4aa0', 10, 50);
-        p.invuln = Math.max(p.invuln, 0.3);
-        return true;
-      }
-      case 'rain': {
-        const targets = this.visibleEnemies(LIGHT_R + 120);
-        if (targets.length === 0) {
-          this.float(p.x, p.y - 34, '近くに敵がいない', '#cccccc');
-          return false;
-        }
-        this.swing(0.3);
-        for (const e of targets) {
-          for (let i = 0; i < 4; i++) {
-            this.effects.push({ type: 'fall', x: e.x + rand(-14, 14), y: e.y + rand(-6, 6), t: -rand(0, 0.25), dur: 0.22 });
-          }
-          this.hitEnemy(e, 30 + this.atk * 1.1, e.x, e.y - 1, 60);
-        }
-        return true;
-      }
       // ---------------------------------------------------------------- 魔術（魔力）
       case 'firebolt':
         this.swing(0.2);
@@ -1489,11 +1357,6 @@ export class Game {
         this.ring(p.x + p.aimX * 16, p.y + p.aimY * 14, 8, 50, '#ff9a70', 0.3);
         this.shake = Math.max(this.shake, 0.15);
         return true;
-      case 'meteorshot':
-        this.swing(0.3);
-        for (const da of [-0.32, -0.16, 0, 0.16, 0.32]) this.shootArrow(aim + da, 16 + this.atk * 1.2, 560, { pierce: true, tint: '#ffd84a', life: 0.7 });
-        this.ring(p.x + p.aimX * 12, p.y + p.aimY * 12, 4, 30, '#ffd84a', 0.3);
-        return true;
       case 'meteor': {
         const targets = this.visibleEnemies(LIGHT_R + 60).slice(0, 3);
         if (targets.length === 0) {
@@ -1565,7 +1428,7 @@ export class Game {
   hitEnemy(e: Enemy, base: number, fx: number, fy: number, kb: number) {
     if (!e.alive) return;
     // 運が高いほど会心の一撃（1.5倍）が出やすい
-    const crit = Math.random() < critRate(this.stat('luck')) + (this.stances.has('hawkeye') ? STANCE_BOOST : 0);
+    const crit = Math.random() < critRate(this.stat('luck'));
     const dmg = Math.max(1, Math.round(base * rand(0.9, 1.1) * (crit ? 1.5 : 1)));
     e.hp -= dmg;
     e.flash = 0.12;
@@ -1775,7 +1638,7 @@ export class Game {
             this.hitEnemy(e, pr.dmg, pr.x - pr.vx, pr.y - pr.vy, 160);
             continue;
           }
-          if (pr.kind !== 'bomb') this.hitEnemy(e, pr.dmg, pr.x - pr.vx, pr.y - pr.vy, 160);
+          this.hitEnemy(e, pr.dmg, pr.x - pr.vx, pr.y - pr.vy, 160);
           dead = true;
           break;
         }
@@ -1799,8 +1662,7 @@ export class Game {
       }
       if (dead) {
         pr.life = -1;
-        if (pr.kind === 'bomb') this.explode(pr.x, pr.y, pr.dmg);
-        else this.burst(pr.x, pr.y - 10, pr.kind === 'fireball' ? '#ff8030' : pr.kind === 'wave' ? '#c8e0ff' : pr.kind === 'orb' ? '#d8b0ff' : '#d0d8e0', 5, 50);
+        this.burst(pr.x, pr.y - 10, pr.kind === 'fireball' ? '#ff8030' : pr.kind === 'wave' ? '#c8e0ff' : pr.kind === 'orb' ? '#d8b0ff' : '#d0d8e0', 5, 50);
       }
     }
     this.projectiles = this.projectiles.filter((pr) => pr.life > 0);
@@ -1911,13 +1773,13 @@ export class Game {
     // わが家の家具：家具の一番近い所までの距離で判定
     if (this.scene === 'home') {
       for (const f of this.furniture) {
-        if (f.kind !== 'shelf' && f.kind !== 'bed') continue;
+        if (f.kind !== 'shelf' && f.kind !== 'bed' && f.kind !== 'box') continue;
         const nx = Math.max(f.x * TILE, Math.min((f.x + f.w) * TILE, p.x));
         const ny = Math.max(f.y * TILE, Math.min((f.y + f.h) * TILE, p.y));
         if (dist(p.x, p.y, nx, ny) < 22) {
-          return f.kind === 'shelf'
-            ? { label: '本棚を見る', act: () => this.ui.showShelf() }
-            : { label: this.sleepsTillMorning() ? 'ベッドで眠る（朝まで）' : 'ベッドで休む', act: () => this.sleep() };
+          if (f.kind === 'shelf') return { label: '本棚を見る', act: () => this.ui.showShelf() };
+          if (f.kind === 'box') return { label: 'BOXを開ける（装備の持ち替え）', act: () => this.ui.showBox() };
+          return { label: this.sleepsTillMorning() ? 'ベッドで眠る（朝まで）' : 'ベッドで休む', act: () => this.sleep() };
         }
       }
     }
@@ -2114,7 +1976,6 @@ export class Game {
     // 画面に重ねる表示
     ctx.setTransform(d, 0, 0, d, 0, 0);
     if (this.scene === 'town') this.drawLabels(camX, camY);
-    if (this.detected) this.drawDetectMarkers(camX, camY);
     this.drawFloats(camX, camY);
     this.drawPrompt(camX, camY);
     if (this.scene === 'dungeon') this.drawMinimap();
@@ -2188,7 +2049,6 @@ export class Game {
       }
     };
     for (const key of m.sprung) draw(key, true);
-    if (this.has('trapsense')) for (const key of m.traps) draw(key, false);
   }
 
   private drawActors(v: View) {
@@ -2223,10 +2083,6 @@ export class Game {
           ctx.setLineDash([4, 4]);
           ctx.stroke();
           ctx.restore();
-        }
-        if (this.pinchOn) {
-          // 窮地の書が発動中：足元から赤いオーラが立ちのぼる
-          glow(ctx, p.x, feet - 18, 28, '#ff3030', 0.35 + Math.sin(this.time * 8) * 0.12);
         }
         if (this.ironwallT > 0) glow(ctx, p.x, feet - 20, 26, '#80b0ff', 0.4 + Math.sin(this.time * 6) * 0.1);
         // 2段階の書の状態：足もとにゆらめくオーラ
@@ -2330,10 +2186,7 @@ export class Game {
   private drawProjectiles() {
     const ctx = this.ctx;
     for (const pr of this.projectiles) {
-      if (pr.kind === 'arrow' || pr.kind === 'bomb') {
-        groundShadow(ctx, pr.x, pr.y + 2, 5, 1.6, 0.25);
-        drawArrow(ctx, pr.x, pr.y - 16, Math.atan2(pr.vy, pr.vx), pr.tint, pr.kind === 'bomb', this.time);
-      } else if (pr.kind === 'orb') {
+      if (pr.kind === 'orb') {
         groundShadow(ctx, pr.x, pr.y + 2, 5, 1.6, 0.2);
         drawOrb(ctx, pr.x, pr.y - 16, this.time);
       } else if (pr.kind === 'wave') {
@@ -2418,7 +2271,7 @@ export class Game {
           break;
         }
         case 'fall': {
-          // 空から降ってくる矢（t が負のあいだは出番待ち）
+          // メテオで空から降ってくるもの（t が負のあいだは出番待ち）
           if (ef.t < 0) break;
           const lift = 170 * (1 - k);
           ctx.globalAlpha = Math.min(1, (1 - k) * 3);
@@ -2430,17 +2283,6 @@ export class Game {
           ctx.globalAlpha = Math.min(1, (1 - k) * 2);
           drawBook(ctx, ef.x, ef.y - 40 - k * 30, ef.color ?? '#c8a030', 18);
           break;
-        case 'smoke': {
-          const r = (ef.r0 ?? 10) + ((ef.r1 ?? 30) - (ef.r0 ?? 10)) * k;
-          ctx.globalAlpha = 0.55 * (1 - k);
-          const g = ctx.createRadialGradient(ef.x, ef.y - 10, 0, ef.x, ef.y - 10, r);
-          g.addColorStop(0, ef.color ?? '#ccc');
-          g.addColorStop(1, 'rgba(200,200,210,0)');
-          ctx.fillStyle = g;
-          ellipsePath(ctx, ef.x, ef.y - 10, r, r);
-          ctx.fill();
-          break;
-        }
       }
       ctx.restore();
     }
@@ -2584,32 +2426,6 @@ export class Game {
     ctx.textBaseline = 'alphabetic';
   }
 
-  private drawDetectMarkers(camX: number, camY: number) {
-    const ctx = this.ctx;
-    const pulse = 0.65 + Math.sin(this.time * 5) * 0.3;
-    const marker = (x: number, y: number, color: string) => {
-      const { sx, sy } = this.toScreen(x, y, camX, camY);
-      ctx.globalAlpha = pulse;
-      ctx.fillStyle = color;
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy - 10);
-      ctx.lineTo(sx + 7, sy);
-      ctx.lineTo(sx, sy + 10);
-      ctx.lineTo(sx - 7, sy);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    };
-    for (const c of this.chests) if (!c.opened) marker((c.tx + 0.5) * TILE, c.ty * TILE - 14, '#ffd84a');
-    const m = this.map;
-    for (let i = 0; i < m.tiles.length; i++) {
-      if (m.tiles[i] === T.STAIRS_DOWN) marker(((i % m.w) + 0.5) * TILE, Math.floor(i / m.w) * TILE - 6, '#7ad0ff');
-    }
-  }
-
   private drawFloats(camX: number, camY: number) {
     const ctx = this.ctx;
     ctx.font = `bold 16px ${FONT}`;
@@ -2667,8 +2483,8 @@ export class Game {
       for (let x = 0; x < m.w; x++) {
         const t = m.get(x, y);
         const explored = m.isExplored(x, y);
-        if (t === T.STAIRS_DOWN && (explored || this.detected)) ctx.fillStyle = '#7ad0ff';
-        else if (!explored) continue;
+        if (!explored) continue;
+        else if (t === T.STAIRS_DOWN) ctx.fillStyle = '#7ad0ff';
         else if (t === T.WALL) ctx.fillStyle = '#433a52';
         else if (t === T.STAIRS_UP) ctx.fillStyle = '#f0e0b0';
         else ctx.fillStyle = '#8a8098';
@@ -2676,7 +2492,7 @@ export class Game {
       }
     }
     for (const c of this.chests) {
-      if (c.opened || !(this.detected || m.isExplored(c.tx, c.ty))) continue;
+      if (c.opened || !m.isExplored(c.tx, c.ty)) continue;
       ctx.fillStyle = c.legendary ? '#e0a0ff' : '#ffd84a';
       ctx.fillRect(ox + c.tx * s - 1, oy + c.ty * s - 1, s + 2, s + 2);
     }

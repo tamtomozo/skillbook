@@ -484,9 +484,9 @@ export function generateArena(boss: BossDef): DungeonResult {
 
 // ---------------------------------------------------------------- わが家（室内）
 
-/** 室内の家具（タイル単位）。shelf と bed は調べられる */
+/** 室内の家具（タイル単位）。shelf・bed・box は調べられる */
 export interface Furniture {
-  kind: 'shelf' | 'bed' | 'table' | 'plant';
+  kind: 'shelf' | 'bed' | 'table' | 'plant' | 'box';
   x: number;
   y: number;
   w: number;
@@ -513,6 +513,7 @@ export function buildHome() {
     { kind: 'bed', x: 10, y: 2, w: 2, h: 2 },
     { kind: 'table', x: 6, y: 5, w: 2, h: 1 },
     { kind: 'plant', x: 12, y: 2, w: 1, h: 1 },
+    { kind: 'box', x: 1, y: 5, w: 2, h: 1 },
   ];
   for (const f of furniture) {
     for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) m.blockers.add(m.key(x, y));

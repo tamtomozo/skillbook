@@ -1,6 +1,6 @@
 /**
  * わが家（室内）の描画。床・壁・暖炉・窓は地面の層、家具は奥行き順に並べて描く。
- * 本棚には、しまってあるスキルブックが実際の表紙の色で並ぶ。
+ * 本棚には、しまってあるスキルブックが実際の表紙の色で並ぶ。BOXには装備していない武器・防具をしまう。
  */
 import { TILE } from './constants';
 import { RNG } from './rng';
@@ -548,6 +548,78 @@ function drawPlant(ctx: C, f: Furniture, time: number) {
   ctx.fillRect(cx - 10, base - 17, 20, 3);
 }
 
+/** 装備をしまっておく木のBOX（鉄の帯と真鍮の錠前つき） */
+function drawBox(ctx: C, f: Furniture) {
+  const x0 = f.x * TILE + 4;
+  const x1 = (f.x + f.w) * TILE - 4;
+  const w = x1 - x0;
+  const bottom = (f.y + f.h) * TILE - 3;
+  const top = bottom - 34;
+  const lidH = 13;
+  groundShadow(ctx, (x0 + x1) / 2, bottom, w / 2 + 4, 5, 0.45);
+  // ふたの上面（奥行き）
+  ctx.fillStyle = '#a06a38';
+  ctx.beginPath();
+  ctx.roundRect(x0 + 1, top - 6, w - 2, 9, [5, 5, 0, 0]);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,230,180,0.18)';
+  ctx.fillRect(x0 + 4, top - 4, w - 8, 2);
+  // ふたの正面
+  const lg = ctx.createLinearGradient(0, top, 0, top + lidH);
+  lg.addColorStop(0, '#8a5a2e');
+  lg.addColorStop(1, '#6a4220');
+  ctx.fillStyle = lg;
+  ctx.fillRect(x0, top, w, lidH);
+  // 箱の正面
+  const bg = ctx.createLinearGradient(0, top + lidH, 0, bottom);
+  bg.addColorStop(0, '#7a4e28');
+  bg.addColorStop(1, '#4e3016');
+  ctx.fillStyle = bg;
+  ctx.fillRect(x0, top + lidH, w, bottom - top - lidH);
+  // 板の継ぎ目
+  ctx.strokeStyle = 'rgba(40,20,6,0.45)';
+  ctx.lineWidth = 1;
+  for (const y of [top + lidH + 7, top + lidH + 14]) {
+    ctx.beginPath();
+    ctx.moveTo(x0 + 1, y);
+    ctx.lineTo(x1 - 1, y);
+    ctx.stroke();
+  }
+  // ふたと箱のすき間
+  ctx.fillStyle = '#2e1a0a';
+  ctx.fillRect(x0, top + lidH - 1, w, 2);
+  // 鉄の帯（縁と縦の2本）
+  ctx.fillStyle = '#4a4e56';
+  ctx.fillRect(x0 - 1, top - 1, 3, bottom - top + 1);
+  ctx.fillRect(x1 - 2, top - 1, 3, bottom - top + 1);
+  for (const bx of [x0 + w * 0.22, x1 - w * 0.22 - 4]) {
+    ctx.fillStyle = '#5a606a';
+    ctx.fillRect(bx, top - 6, 4, bottom - top + 6);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(bx, top - 6, 1, bottom - top + 6);
+    ctx.fillStyle = '#c8c0a8';
+    for (const ry of [top + 4, top + lidH + 6, bottom - 5]) ctx.fillRect(bx + 1.5, ry, 1.2, 1.2);
+  }
+  // 真鍮の錠前
+  const cx = (x0 + x1) / 2;
+  const lockG = ctx.createLinearGradient(0, top + lidH - 5, 0, top + lidH + 8);
+  lockG.addColorStop(0, '#ffe08a');
+  lockG.addColorStop(1, '#b88a2a');
+  ctx.fillStyle = lockG;
+  ctx.beginPath();
+  ctx.roundRect(cx - 5, top + lidH - 5, 10, 12, 2);
+  ctx.fill();
+  ctx.fillStyle = '#3a2408';
+  ctx.beginPath();
+  ctx.arc(cx, top + lidH, 1.6, 0, TAU);
+  ctx.fill();
+  ctx.fillRect(cx - 0.7, top + lidH, 1.4, 4);
+  // 足
+  ctx.fillStyle = '#3a2410';
+  ctx.fillRect(x0 + 1, bottom - 2, 5, 3);
+  ctx.fillRect(x1 - 6, bottom - 2, 5, 3);
+}
+
 export function homeObjects(furniture: Furniture[], shelfColors: string[], time: number, cleared: boolean): Sortable[] {
   return furniture.map((f) => ({
     y: (f.y + f.h) * TILE,
@@ -555,6 +627,7 @@ export function homeObjects(furniture: Furniture[], shelfColors: string[], time:
       if (f.kind === 'shelf') drawShelf(ctx, f, shelfColors, time);
       else if (f.kind === 'bed') drawBed(ctx, f);
       else if (f.kind === 'table') drawTable(ctx, f, time, cleared);
+      else if (f.kind === 'box') drawBox(ctx, f);
       else drawPlant(ctx, f, time);
     },
   }));

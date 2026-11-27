@@ -1139,17 +1139,6 @@ button.x {
   color: #ff8a7a;
   text-shadow: 0 0 6px rgba(255, 80, 60, 0.7);
 }
-.hud .pinch {
-  display: none;
-  margin-top: 5px;
-  font-size: 12px;
-  color: #ffb0a0;
-}
-.hud .pinch.on {
-  display: block;
-  animation: pulse 1s infinite;
-}
-
 /* ---------------------------------------------------------------- 本の系統 */
 .ktag {
   font-size: 11px;
@@ -1165,9 +1154,6 @@ button.x {
 }
 .ktag.stat {
   background: #3a6a5a;
-}
-.ktag.pinch {
-  background: #a02a3a;
 }
 .kmini {
   font-style: normal;
@@ -1185,9 +1171,6 @@ button.x {
 .kmini.stat {
   background: #3a6a5a;
 }
-.kmini.pinch {
-  background: #a02a3a;
-}
 .bparams {
   display: flex;
   gap: 18px;
@@ -1198,8 +1181,7 @@ button.x {
 .bparams b {
   color: #ffe8a8;
 }
-.lvstep.stat .i,
-.lvstep.pinch .i {
+.lvstep.stat .i {
   font-size: 13px;
   line-height: 1.8;
 }
@@ -1263,10 +1245,6 @@ button.x {
   display: inline-block;
   width: 34px;
   color: #ffd84a;
-}
-.pinch-on {
-  color: #ff8a7a;
-  animation: pulse 1s infinite;
 }
 @media (max-width: 640px) {
   .effect-card {
@@ -1342,9 +1320,6 @@ button.x {
 }
 .cpow {
   color: #c8a8e8;
-}
-.cpow.pinch {
-  color: #e890c8;
 }
 .cpow.tech {
   color: #ff8a9a;
@@ -1740,4 +1715,36 @@ s.was {
 }
 button:disabled .salep {
   color: inherit;
+}
+
+/* ---------------------------------------------------------------- わが家のBOX */
+
+.box-panel .cmps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.cmp {
+  font-size: 11px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c8b89a;
+}
+
+.cmp.up {
+  background: rgba(100, 160, 70, 0.3);
+  color: #c8f0a8;
+}
+
+.cmp.down {
+  background: rgba(200, 70, 60, 0.3);
+  color: #ffb8a8;
+}
+
+.cmp.swap {
+  background: rgba(90, 130, 210, 0.3);
+  color: #c8dcff;
 }

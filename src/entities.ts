@@ -119,15 +119,13 @@ export interface Projectile {
   life: number;
   maxLife: number;
   from: 'player' | 'enemy';
-  /** arrow: 矢 / wave: 剣閃 / bomb: 爆裂矢 / orb: 杖の魔力弾 / fireball: 火の玉（敵も使う） */
-  kind: 'arrow' | 'wave' | 'bomb' | 'orb' | 'fireball';
+  /** wave: 剣閃 / orb: 杖の魔力弾 / fireball: 火の玉（敵も使う） */
+  kind: 'wave' | 'orb' | 'fireball';
   /** 貫通する弾が当たった敵（同じ敵に二度当たらないように）。あれば貫通する */
   hits?: Enemy[];
-  /** 矢の光の色 */
-  tint?: string;
 }
 
-export type EffectType = 'slash' | 'ring' | 'particle' | 'bolt' | 'after' | 'icon' | 'smoke' | 'fall';
+export type EffectType = 'slash' | 'ring' | 'particle' | 'bolt' | 'after' | 'icon' | 'fall';
 
 export interface Effect {
   type: EffectType;

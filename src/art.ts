@@ -191,8 +191,8 @@ export interface HunterPose {
   /** 鍛冶で鍛えた段階（刃のつやと光が増す） */
   weaponPlus?: number;
   armor?: string;
-  /** 装備している武器の種類（剣・弓・杖・盾で持ち方が変わる） */
-  wtype?: 'sword' | 'bow' | 'staff' | 'shield';
+  /** 装備している武器の種類（剣・杖・盾で持ち方が変わる） */
+  wtype?: 'sword' | 'staff' | 'shield';
 }
 
 /** 防具ごとのベストの色：暗い・明るい・中間 */
@@ -488,15 +488,9 @@ export function drawHunter(ctx: C, x: number, y: number, p: HunterPose) {
   ctx.fill();
 
   // 手前の腕と武器
-  if (p.wtype === 'bow' || p.wtype === 'staff' || p.wtype === 'shield') {
+  if (p.wtype === 'staff' || p.wtype === 'shield') {
     const k = p.attack >= 0 ? 1 - (1 - p.attack) ** 2 : 0;
-    if (p.wtype === 'bow') {
-      // 弓：射るときは腕をまっすぐ前へ伸ばし、弦を引いて放つ
-      const a = p.attack >= 0 ? 1.4 : mv ? 0.35 - Math.sin(w) * 0.3 : 0.35;
-      const hand = arm(ctx, 1.5, -25 + u, a, 10.5, 3.7, shirt, skin);
-      const ang = p.attack >= 0 ? 0 : Math.atan2(Math.cos(a + 0.25), Math.sin(a + 0.25));
-      drawBow(ctx, hand.hx, hand.hy, ang, p.weapon, p.weaponPlus, bowPull(p.attack));
-    } else if (p.wtype === 'staff') {
+    if (p.wtype === 'staff') {
       // 杖：ふだんは立てて持ち、攻撃では先を前へ突き出す
       const a = p.attack >= 0 ? 0.3 + Math.sin(k * Math.PI) * 0.9 + k * 0.2 : mv ? 0.25 - Math.sin(w) * 0.25 : 0.25;
       const hand = arm(ctx, 1.5, -25 + u, a, 10.5, 3.7, shirt, skin);
@@ -558,12 +552,7 @@ function drawHunterFrontBack(ctx: C, x: number, y: number, p: HunterPose, back: 
   let hand: { x: number; y: number };
   let bladeA: number;
   const kk = p.attack >= 0 ? Math.sin((1 - (1 - p.attack) ** 2) * Math.PI) : 0;
-  if (p.wtype === 'bow') {
-    // 弓：射るときは体の前（背中向きなら奥）に構える。ふだんは体の横に下げる
-    if (p.attack >= 0) hand = back ? { x: sd * 1.5, y: -31 + u } : { x: sd * 1.5, y: -17 + u };
-    else hand = { x: sd * 8.4, y: -15.5 + u + (mv ? Math.sin(w) * 1.5 : 0) };
-    bladeA = 0;
-  } else if (p.wtype === 'staff') {
+  if (p.wtype === 'staff') {
     // 杖：体の横に立てて持ち、攻撃では掲げる
     hand = { x: sd * (8.4 - kk * 1.5), y: -15.5 + u - kk * 8 + (mv && p.attack < 0 ? Math.sin(w) * 1.5 : 0) };
     bladeA = 0;
@@ -587,10 +576,7 @@ function drawHunterFrontBack(ctx: C, x: number, y: number, p: HunterPose, back: 
     bladeA = sd * 0.4;
   }
   const swordArm = () => {
-    if (p.wtype === 'bow') {
-      const ang = p.attack >= 0 ? (back ? -Math.PI / 2 : Math.PI / 2) : sd < 0 ? Math.PI : 0;
-      drawBow(ctx, hand.x, hand.y, ang, p.weapon, p.weaponPlus, bowPull(p.attack));
-    } else if (p.wtype === 'staff') {
+    if (p.wtype === 'staff') {
       drawStaff(ctx, hand.x, hand.y, sd * 0.08, p.weapon, p.weaponPlus, p.attack >= 0 ? 1 - p.attack : 0, p.time);
     } else if (p.wtype !== 'shield') drawShortSword(ctx, hand.x, hand.y, bladeA, p.weapon, p.weaponPlus);
     ctx.strokeStyle = shirt;
@@ -912,85 +898,6 @@ function drawHunterFrontBack(ctx: C, x: number, y: number, p: HunterPose, back: 
   // 正面向きの剣は体の手前
   if (!back) swordArm();
 
-  ctx.restore();
-}
-
-/** 攻撃の進み具合から弦の引き具合（0〜1）を出す。前半で引きしぼり、後半で放つ */
-function bowPull(attack: number): number {
-  if (attack < 0) return 0;
-  return attack < 0.55 ? attack / 0.55 : 0;
-}
-
-/** 弓ごとの長さ・色 */
-const BOWS: Record<string, { len: number; c: [string, string]; str: string; glow?: string }> = {
-  shortbow: { len: 10, c: ['#b8844a', '#6a4220'], str: '#efe6cc' },
-  longbow: { len: 13, c: ['#9a5a30', '#40200e'], str: '#f4ecd4' },
-  spiritbow: { len: 13, c: ['#e0ffd0', '#4a9a5a'], str: '#e8fff4', glow: '#a0ffb8' },
-  bonebow: { len: 12, c: ['#f8f4e4', '#a8a088'], str: '#d8e0e8' },
-};
-
-/**
- * 弓。(x, y) が握り。ang は矢を放つ向き（0 = +x）。pull は弦の引き具合 0〜1（引いているあいだは矢をつがえる）
- */
-function drawBow(ctx: C, x: number, y: number, ang: number, weapon = 'shortbow', plus = 0, pull = 0) {
-  const b = BOWS[weapon] ?? BOWS.shortbow;
-  const L = b.len;
-  const bend = L * 0.5 + pull * 1.5;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(ang);
-  // 弦
-  const sx = -2 - pull * 8;
-  ctx.strokeStyle = b.str;
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(-2, -L);
-  ctx.lineTo(sx, 0);
-  ctx.lineTo(-2, L);
-  ctx.stroke();
-  // つがえた矢
-  if (pull > 0) {
-    ctx.fillStyle = '#c8a070';
-    ctx.fillRect(sx, -0.45, 16 - pull * 2, 0.9);
-    ctx.fillStyle = '#d8dce6';
-    ctx.beginPath();
-    ctx.moveTo(sx + 16 - pull * 2, -1.6);
-    ctx.lineTo(sx + 19 - pull * 2, 0);
-    ctx.lineTo(sx + 16 - pull * 2, 1.6);
-    ctx.fill();
-    ctx.fillStyle = '#e04a3e';
-    ctx.fillRect(sx + 0.3, -1.4, 2.4, 0.9);
-    ctx.fillRect(sx + 0.3, 0.5, 2.4, 0.9);
-  }
-  // 弓の本体（鍛えた弓は +3 から光をまとう）
-  if (b.glow || plus >= 3) {
-    ctx.shadowColor = b.glow ?? '#fff0b0';
-    ctx.shadowBlur = 5 + Math.max(0, plus - 2) * 2;
-  }
-  ctx.strokeStyle = lin(ctx, 0, -L, 0, L, [
-    [0, b.c[1]],
-    [0.5, b.c[0]],
-    [1, b.c[1]],
-  ]);
-  ctx.lineWidth = 1.9;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-2, -L);
-  ctx.quadraticCurveTo(bend * 1.6, 0, -2, L);
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  // 握り
-  const gx = (bend * 1.6 - 2) / 2;
-  ctx.fillStyle = '#3a2414';
-  ctx.fillRect(gx - 1.3, -1.8, 2.4, 3.6);
-  if (plus >= 1) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.3 + plus * 0.1})`;
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(-1, -L + 1.5);
-    ctx.quadraticCurveTo(bend * 1.3, -L * 0.3, gx, -2.5);
-    ctx.stroke();
-  }
   ctx.restore();
 }
 

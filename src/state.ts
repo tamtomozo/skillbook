@@ -1,4 +1,5 @@
-import { BOOKS, SKILLS, START_BOOK, isBook, lvUpCost } from './skills';
+import { BOOKS, SKILLS, START_BOOK, isBook, lvUpCost, spSpent } from './skills';
+import { eqSellPrice } from './equipment';
 import { DUNGEONS, FIELD_DUNGEONS, RANK_B, RANK_S, RUINS, rankDef } from './dungeons';
 import { START_MINUTES } from './daytime';
 
@@ -6,7 +7,7 @@ export const HOTBAR_SIZE = 5;
 /** 持ち歩けるスキルブックの数 */
 export const MAX_CARRY = 3;
 
-/** セーブデータの版。2 = 3系統（パラメタ・技・窮地）のスキルブック */
+/** セーブデータの版。2 = スキルブックの系統（パラメタ・技）ができた版 */
 export const SAVE_VER = 2;
 
 /** 呪われた本。no は拾った順の通し番号（浄化するまで変わらない） */
@@ -138,6 +139,7 @@ export function loadGame(): SaveData | null {
     d.bank = Math.max(0, Math.floor(Number(d.bank) || 0));
     d.minutes = Math.max(0, Number(d.minutes) || START_MINUTES);
     if ((raw.ver ?? 1) < SAVE_VER) migrateV1(d, raw);
+    migrateCut(d);
     migrateCursed(d, raw);
     if (raw.rank === undefined) migrateGuild(d);
     d.rank = Math.max(0, Math.min(RANK_S, Math.floor(Number(d.rank) || 0)));
@@ -207,6 +209,69 @@ function migrateGuild(d: SaveData) {
     const r = rankDef(d.rank);
     d.notice = (d.notice ? d.notice + ' ' : '') + `町にハンターギルドができた！ これまでの冒険が認められ、ランク ${r.name}（${r.title}）に認定された。ギルドでは各地のダンジョンへ出発したり、昇格試験を受けたりできる。`;
   }
+}
+
+/**
+ * 弓と窮地の書がなくなる前のセーブ。なくなった本と装備は、道具屋・武器防具屋の買い取り値ぶんのゴールドに替え、
+ * 本のレベル上げに使った SP を返す。呪われたままの本は消える。
+ */
+const CUT_BOOKS: Record<string, { name: string; gold: number }> = {
+  bow1: { name: '弓術の書・初級', gold: 150 },
+  bow2: { name: '弓術の書・中級', gold: 325 },
+  bow3: { name: '弓術の書・上級', gold: 500 },
+  bow4: { name: '弓術の書・二段', gold: 500 },
+  rage: { name: '背水の書', gold: 400 },
+  endure: { name: '不屈の書', gold: 400 },
+  awaken: { name: '覚醒の書', gold: 400 },
+  reckless: { name: '捨て身の書', gold: 400 },
+  aegis: { name: '魔盾の書', gold: 400 },
+  fortune: { name: '起死回生の書', gold: 400 },
+};
+const CUT_WEAPONS: Record<string, { name: string; price: number }> = {
+  shortbow: { name: '狩人の弓', price: 160 },
+  longbow: { name: 'イチイの長弓', price: 520 },
+  spiritbow: { name: '精霊樹の弓', price: 1350 },
+  bonebow: { name: '白骨の弓', price: 880 },
+};
+
+function migrateCut(d: SaveData) {
+  let gold = 0;
+  let sp = 0;
+  const names: string[] = [];
+  for (const [id, cut] of Object.entries(CUT_BOOKS)) {
+    const n = (d.books.includes(id) ? 1 : 0) + (d.spares?.[id] ?? 0);
+    if (n > 0) {
+      gold += cut.gold * n;
+      sp += spSpent(d.bookLv?.[id] ?? 0);
+      names.push(n > 1 ? `${cut.name}×${n}` : cut.name);
+    }
+    d.books = d.books.filter((b) => b !== id);
+    d.carried = d.carried.filter((b) => b !== id);
+    delete d.bookLv?.[id];
+    delete d.spares?.[id];
+  }
+  for (const [id, cut] of Object.entries(CUT_WEAPONS)) {
+    if (d.weapons.includes(id)) {
+      gold += eqSellPrice(cut.price, d.plus?.[id] ?? 0);
+      names.push(cut.name);
+    }
+    d.weapons = d.weapons.filter((w) => w !== id);
+    delete d.plus?.[id];
+    if (d.weapon === id) d.weapon = 'dagger';
+  }
+  if (!d.weapons.includes('dagger')) d.weapons.unshift('dagger');
+  // 呪われた本（古い版では本の id の文字列のこともある）。この後 migrateCursed で形をそろえる
+  const cursedBook = (c: unknown) => (typeof c === 'string' ? c : (c as CursedBook | null)?.book ?? '');
+  const cursed = (d.cursed ?? []) as unknown[];
+  const lostCursed = cursed.filter((c) => CUT_BOOKS[cursedBook(c)]).length;
+  d.cursed = cursed.filter((c) => !CUT_BOOKS[cursedBook(c)]) as CursedBook[];
+  if (names.length === 0 && lostCursed === 0) return;
+  d.gold += gold;
+  d.sp += sp;
+  let msg = '弓と窮地の書は、この世界から姿を消した。';
+  if (names.length) msg += `${names.join('・')}は引き取られ、${gold} G${sp > 0 ? ` と SP ${sp}` : ''} が戻ってきた。`;
+  if (lostCursed) msg += `呪われた本のうち ${lostCursed} 冊は、霧のように消えてしまった。`;
+  d.notice = (d.notice ? d.notice + ' ' : '') + msg;
 }
 
 /** 旧版（ver 1）の本の値段。道具屋で買った本は代金を返す */
