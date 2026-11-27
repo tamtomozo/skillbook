@@ -1,10 +1,12 @@
 import './style.css';
 import { Game } from './game';
+import { installClickSound } from './sound';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ui = document.getElementById('ui')!;
 
 const game = new Game(canvas, ui);
+installClickSound();
 window.addEventListener('resize', () => game.resize(window.innerWidth, window.innerHeight));
 
 // 開発中のみ、ブラウザのコンソールから game を触れるようにする
