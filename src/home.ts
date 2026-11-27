@@ -1,12 +1,13 @@
 /**
  * わが家（室内）の描画。床・壁・暖炉・窓は地面の層、家具は奥行き順に並べて描く。
- * 本棚には、しまってあるスキルブックが実際の表紙の色で並ぶ。BOXには装備していない武器・防具をしまう。
+ * 本棚には、しまってあるスキルブックが実際の表紙の色で並ぶ。ボックスには装備していない武器・防具をしまう。
  */
 import { TILE } from './constants';
 import { RNG } from './rng';
 import type { Furniture, TileMap } from './map';
 import { ellipsePath, glow, groundShadow } from './art';
-import type { Sortable } from './terrain';
+import type { Light, Sortable } from './terrain';
+import { skyOf } from './daytime';
 
 type C = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -61,7 +62,8 @@ function woodPattern(ctx: C): CanvasPattern {
 
 // ================================================================ 床と壁
 
-export function drawHomeGround(ctx: C, m: TileMap, time: number) {
+/** clock は 0:00 からの分（窓の外の空の色に使う） */
+export function drawHomeGround(ctx: C, m: TileMap, time: number, clock: number) {
   const W = m.w * TILE;
   const H = m.h * TILE;
   const backH = 2 * TILE;
@@ -128,24 +130,45 @@ export function drawHomeGround(ctx: C, m: TileMap, time: number) {
     ctx.fillRect(px, 6, 6, backH - 6);
   }
 
-  // 窓（ベッドの上）と差し込む光
+  // 窓（ベッドの上）と差し込む光。外の空は時刻で変わる（昼は青空、朝夕は焼けた色、夜は星空）
   const wx = 10.2 * TILE;
+  const ww = 1.6 * TILE;
+  const out = skyOf(clock);
+  const night = Math.min(1, out.dark / 0.74);
+  const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * night)).join(',')})`;
   ctx.fillStyle = '#4a2e18';
-  ctx.fillRect(wx - 3, 9, 1.6 * TILE + 6, 28);
+  ctx.fillRect(wx - 3, 9, ww + 6, 28);
   const sky = ctx.createLinearGradient(0, 12, 0, 34);
-  sky.addColorStop(0, '#8ac8f0');
-  sky.addColorStop(1, '#d8f0ff');
+  sky.addColorStop(0, mix([138, 200, 240], [10, 16, 44]));
+  sky.addColorStop(1, mix([216, 240, 255], [34, 46, 92]));
   ctx.fillStyle = sky;
-  ctx.fillRect(wx, 12, 1.6 * TILE, 22);
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ellipsePath(ctx, wx + 14 + Math.sin(time * 0.2) * 4, 19, 7, 2.6);
-  ctx.fill();
+  ctx.fillRect(wx, 12, ww, 22);
+  // 朝焼け・夕焼けの色
+  ctx.fillStyle = `rgba(${out.tint.map(Math.round).join(',')},${(out.tintA * 0.9).toFixed(3)})`;
+  ctx.fillRect(wx, 12, ww, 22);
+  if (night < 0.9) {
+    ctx.fillStyle = `rgba(255,255,255,${(0.85 * (1 - night)).toFixed(3)})`;
+    ellipsePath(ctx, wx + 14 + Math.sin(time * 0.2) * 4, 19, 7, 2.6);
+    ctx.fill();
+  }
+  if (night > 0.3) {
+    // 星と月
+    for (let i = 0; i < 6; i++) {
+      const tw = 0.5 + 0.5 * Math.sin(time * (1.1 + i * 0.3) + i * 1.7);
+      ctx.fillStyle = `rgba(240,244,255,${((night - 0.3) * 1.4 * tw).toFixed(3)})`;
+      ctx.fillRect(wx + 3 + ((i * 17) % (ww - 6)), 14 + ((i * 11) % 18), 1.2, 1.2);
+    }
+    ctx.fillStyle = `rgba(255,248,210,${((night - 0.3) * 1.4).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(wx + ww - 9, 18, 3.2, 0, TAU);
+    ctx.fill();
+  }
   ctx.fillStyle = '#4a2e18';
   ctx.fillRect(wx + 0.8 * TILE - 1, 12, 2, 22);
-  ctx.fillRect(wx, 22, 1.6 * TILE, 2);
+  ctx.fillRect(wx, 22, ww, 2);
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = 'rgba(255,240,200,0.07)';
+  ctx.fillStyle = `rgba(255,240,200,${(0.07 * (1 - night)).toFixed(3)})`;
   ctx.beginPath();
   ctx.moveTo(wx, 34);
   ctx.lineTo(wx + 1.6 * TILE, 34);
@@ -548,7 +571,7 @@ function drawPlant(ctx: C, f: Furniture, time: number) {
   ctx.fillRect(cx - 10, base - 17, 20, 3);
 }
 
-/** 装備をしまっておく木のBOX（鉄の帯と真鍮の錠前つき） */
+/** 装備をしまっておく木のボックス（鉄の帯と真鍮の錠前つき） */
 function drawBox(ctx: C, f: Furniture) {
   const x0 = f.x * TILE + 4;
   const x1 = (f.x + f.w) * TILE - 4;
@@ -618,6 +641,21 @@ function drawBox(ctx: C, f: Furniture) {
   ctx.fillStyle = '#3a2410';
   ctx.fillRect(x0 + 1, bottom - 2, 5, 3);
   ctx.fillRect(x1 - 6, bottom - 2, 5, 3);
+}
+
+/** 夜の室内で明るく残す灯り：暖炉、暖炉の上のろうそく、机のろうそく */
+export function homeLights(furniture: Furniture[]): Light[] {
+  const fx = 7.5 * TILE;
+  const backH = 2 * TILE;
+  const out: Light[] = [
+    { x: fx, y: backH - 4, r: 170, tint: 'rgba(255,140,50,0.2)' },
+    { x: fx - 20, y: 4, r: 44, tint: 'rgba(255,180,80,0.12)' },
+    { x: fx + 20, y: 4, r: 44, tint: 'rgba(255,180,80,0.12)' },
+  ];
+  for (const f of furniture) {
+    if (f.kind === 'table') out.push({ x: (f.x + f.w) * TILE - 14, y: f.y * TILE - 10, r: 80, tint: 'rgba(255,180,80,0.14)' });
+  }
+  return out;
 }
 
 export function homeObjects(furniture: Furniture[], shelfColors: string[], time: number, cleared: boolean): Sortable[] {

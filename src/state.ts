@@ -10,8 +10,8 @@ export const MAX_CARRY = 3;
 /** セーブデータの版。2 = スキルブックの系統（パラメタ・技）ができた版 */
 export const SAVE_VER = 2;
 
-/** 呪われた本。no は拾った順の通し番号（浄化するまで変わらない） */
-export interface CursedBook {
+/** 未鑑定の本。no は拾った順の通し番号（鑑定するまで変わらない） */
+export interface UnidentifiedBook {
   no: number;
   book: string;
 }
@@ -33,11 +33,12 @@ export interface SaveData {
   /** 本ごとのレベル。本はレベル0（効果なし）から始まる */
   bookLv: Record<string, number>;
   /**
-   * ダンジョンで拾ったまま、まだ浄化していない呪われた本。正体が分からず使えない。
-   * 持っている本と同じ本のこともある。かばんの枠は使わない
+   * ダンジョンで拾ったまま、まだ鑑定していない本。正体が分からず使えない。
+   * 持っている本と同じ本のこともある。かばんの枠は使わない。
+   * （以前は「呪われた本」と呼んでいたので、セーブの項目名は cursed のまま）
    */
-  cursed: CursedBook[];
-  /** これまでに拾った呪われた本の数（通し番号に使う） */
+  cursed: UnidentifiedBook[];
+  /** これまでに拾った未鑑定の本の数（通し番号に使う） */
   curseSeq: number;
   /** 同じ本の予備（本の id → 冊数）。道具屋で売れる */
   spares: Record<string, number>;
@@ -176,7 +177,7 @@ export function loadGame(): SaveData | null {
  */
 function migrateCursed(d: SaveData, raw: Partial<SaveData>) {
   const old = raw as { cursed?: unknown[]; cursedNo?: Record<string, number> };
-  const list: CursedBook[] = [];
+  const list: UnidentifiedBook[] = [];
   (old.cursed ?? []).forEach((c, i) => {
     if (typeof c === 'string') {
       if (!isBook(c)) return;
@@ -184,8 +185,8 @@ function migrateCursed(d: SaveData, raw: Partial<SaveData>) {
       d.carried = d.carried.filter((b) => b !== c);
       delete d.bookLv[c];
       list.push({ no: old.cursedNo?.[c] ?? i + 1, book: c });
-    } else if (c && typeof c === 'object' && isBook((c as CursedBook).book)) {
-      list.push({ no: Number((c as CursedBook).no) || i + 1, book: (c as CursedBook).book });
+    } else if (c && typeof c === 'object' && isBook((c as UnidentifiedBook).book)) {
+      list.push({ no: Number((c as UnidentifiedBook).no) || i + 1, book: (c as UnidentifiedBook).book });
     }
   });
   d.cursed = list;
@@ -213,7 +214,7 @@ function migrateGuild(d: SaveData) {
 
 /**
  * 弓と窮地の書がなくなる前のセーブ。なくなった本と装備は、道具屋・武器防具屋の買い取り値ぶんのゴールドに替え、
- * 本のレベル上げに使った SP を返す。呪われたままの本は消える。
+ * 本のレベル上げに使った SP を返す。未鑑定のままの本は消える。
  */
 const CUT_BOOKS: Record<string, { name: string; gold: number }> = {
   bow1: { name: '弓術の書・初級', gold: 150 },
@@ -260,17 +261,17 @@ function migrateCut(d: SaveData) {
     if (d.weapon === id) d.weapon = 'dagger';
   }
   if (!d.weapons.includes('dagger')) d.weapons.unshift('dagger');
-  // 呪われた本（古い版では本の id の文字列のこともある）。この後 migrateCursed で形をそろえる
-  const cursedBook = (c: unknown) => (typeof c === 'string' ? c : (c as CursedBook | null)?.book ?? '');
+  // 未鑑定の本（古い版では本の id の文字列のこともある）。この後 migrateCursed で形をそろえる
+  const cursedBook = (c: unknown) => (typeof c === 'string' ? c : (c as UnidentifiedBook | null)?.book ?? '');
   const cursed = (d.cursed ?? []) as unknown[];
   const lostCursed = cursed.filter((c) => CUT_BOOKS[cursedBook(c)]).length;
-  d.cursed = cursed.filter((c) => !CUT_BOOKS[cursedBook(c)]) as CursedBook[];
+  d.cursed = cursed.filter((c) => !CUT_BOOKS[cursedBook(c)]) as UnidentifiedBook[];
   if (names.length === 0 && lostCursed === 0) return;
   d.gold += gold;
   d.sp += sp;
   let msg = '弓と窮地の書は、この世界から姿を消した。';
   if (names.length) msg += `${names.join('・')}は引き取られ、${gold} G${sp > 0 ? ` と SP ${sp}` : ''} が戻ってきた。`;
-  if (lostCursed) msg += `呪われた本のうち ${lostCursed} 冊は、霧のように消えてしまった。`;
+  if (lostCursed) msg += `未鑑定の本のうち ${lostCursed} 冊は、霧のように消えてしまった。`;
   d.notice = (d.notice ? d.notice + ' ' : '') + msg;
 }
 

@@ -109,7 +109,7 @@ export const ARMORS: ArmorDef[] = [
   { id: 'cloth', name: '旅人の服', def: 0, up: 1, price: 0, minFloor: 0, icon: '👕', desc: '動きやすいが、身を守る力はない。' },
   { id: 'leather', name: '革の鎧', def: 6, up: 1, price: 150, minFloor: 0, icon: '🦺', desc: 'なめし革を重ねた軽い鎧。' },
   { id: 'chain', name: '鎖かたびら', def: 12, up: 2, price: 480, minFloor: 3, icon: '⛓️', desc: '細い鉄の輪を編んだ鎧。斬撃に強い。' },
-  { id: 'mithrilmail', name: 'ミスリルの鎧', def: 20, up: 3, price: 1300, minFloor: 6, icon: '🛡️', desc: '魔法銀で編まれた、羽のように軽い鎧。' },
+  { id: 'mithrilmail', name: 'ミスリルの鎧', def: 20, up: 3, price: 1300, minFloor: 6, icon: '🥋', desc: '魔法銀で編まれた、羽のように軽い鎧。' },
   // ---- 作成専用（鍛冶場で鉱石と魔物の素材から作る。minFloor は作り方を教えてもらえる危険度）
   { id: 'wingcloak', name: '夜翼の外套', def: 8, up: 1, price: 600, minFloor: 2, icon: '🦇', desc: 'コウモリの翼を縫い合わせた黒い外套。風のように身が軽くなる。', effect: 'swift', craft: { gold: 250, ores: { iron: 3 }, mats: { wing: 5, jelly: 4 } } },
   { id: 'bonemail', name: '骸骨の鎧', def: 14, up: 2, price: 850, minFloor: 3, icon: '💀', desc: '古い骨を鉄の鋲で留めた鎧。倒した敵の生気を吸いとる。', effect: 'vigor', craft: { gold: 350, ores: { iron: 4 }, mats: { bone: 6, fang: 3 } } },

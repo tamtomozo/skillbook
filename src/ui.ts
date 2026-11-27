@@ -2,15 +2,35 @@ import type { Game } from './game';
 import type { Input } from './input';
 import { MAX_HP, MAX_MP } from './constants';
 import { FIELD_DUNGEONS, RANKS, RANK_B, RUINS, dungeonById, rankDef, trialFor, type DungeonDef } from './dungeons';
-import { BOOKS, BOOK_KIND_NAME, CURSED_NAME, CURSE_COLOR, CURSE_POWER, SCHOOL_NAME, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, lvUpCost, purifyPrice, sellPrice, spSpent, type BookKind, type School, type Stat } from './skills';
-import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type CursedBook } from './state';
+import { BOOKS, BOOK_KIND_NAME, APPRAISE_HINT, SCHOOL_NAME, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, lvUpCost, appraisePrice, sellPrice, UNIDENTIFIED_COLOR, UNIDENTIFIED_NAME, spSpent, type BookKind, type School, type Stat } from './skills';
+import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type UnidentifiedBook } from './state';
 import { PHASE_ICON, PHASE_NAME, clockText, offText, phaseOf, type SaleTarget } from './daytime';
 import type { BookDef } from './skills';
 import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStat, weaponStatText, type ArmorDef, type Recipe, type WeaponDef, type WeaponType } from './equipment';
 
 type SmithyTab = 'shop' | 'forge' | 'craft' | 'sell';
 
-type ModalKind = 'title' | 'book' | 'equip' | 'shop' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'box' | 'smithy' | 'temple' | 'bank' | 'guild' | 'promo';
+type ShopTab = 'buy' | 'sell' | 'appraise';
+/** 道具屋の店主のせりふ（タブごと） */
+const SHOP_TALK: Record<ShopTab, string> = {
+  buy: '店主「いらっしゃい！ ダンジョンに潜るなら準備は万全にな。技の書もパラメタの書も揃ってるぜ。」',
+  sell: '店主「本の買い取りかい？ ダブった本なら、いい値で引き取るぜ。」',
+  appraise: '店主「宝箱から出てきた本かい？ 見せてみな。目利きには自信があるんだ。力の強い本ほど鑑定料は高くなるぜ。」',
+};
+/** スキルブックと装備をまとめたウィンドウのタブ */
+export type MenuTab = 'book' | 'equip' | 'items';
+/** タブの並び（Tab キーで順に切り替える）と、それぞれを開くキー */
+const MENU_TABS: MenuTab[] = ['book', 'equip', 'items'];
+const MENU_KEY: Record<MenuTab, { code: string; label: string }> = {
+  book: { code: 'KeyK', label: 'K' },
+  equip: { code: 'KeyC', label: 'C' },
+  items: { code: 'KeyI', label: 'I' },
+};
+/** 押されたキーで開くタブ（なければ null） */
+export function menuTabKey(inp: Input): MenuTab | null {
+  return MENU_TABS.find((t) => inp.pressed(MENU_KEY[t].code)) ?? null;
+}
+type ModalKind = 'title' | 'menu' | 'shop' | 'entrance' | 'help' | 'death' | 'clear' | 'shelf' | 'box' | 'smithy' | 'temple' | 'bank' | 'guild' | 'promo';
 
 const CONTROLS = `
 <table class="ctrl">
@@ -18,8 +38,8 @@ const CONTROLS = `
   <tr><td>Space / J</td><td>攻撃（長押しで連続攻撃）</td></tr>
   <tr><td>1 〜 5</td><td>ホットバーのスキルを使う</td></tr>
   <tr><td>E / Enter</td><td>調べる・宝箱・階段・お店</td></tr>
-  <tr><td>K / Tab</td><td>スキルブックを開く</td></tr>
-  <tr><td>I</td><td>装備を確認する</td></tr>
+  <tr><td>K / C / I</td><td>スキルブック / 装備 / アイテムを開く</td></tr>
+  <tr><td>Tab</td><td>ウィンドウを開く・タブを切り替える</td></tr>
   <tr><td>Q / R</td><td>回復薬 / エーテルを使う</td></tr>
   <tr><td>Esc</td><td>ヘルプ・画面を閉じる</td></tr>
 </table>`;
@@ -44,11 +64,17 @@ export class UI {
   private closable = true;
   private onAct: ((act: string, arg: string) => void) | null = null;
   private bookSel = '';
-  /** 神殿で最後に浄化した本（正体を見せる）と、それが予備になったか */
+  /** スキルブック・装備ウィンドウでいま開いているタブ */
+  private menuTab: MenuTab = 'book';
+  /** ボックスで選んでいる装備（"weapon:steel" など） */
+  private boxSel = '';
+  /** 道具屋で最後に鑑定した本（正体を見せる）と、それが予備になったか */
   private revealed = '';
   private revealedSpare = false;
-  /** 道具屋の「買う／売る」 */
-  private shopTab: 'buy' | 'sell' = 'buy';
+  /** 道具屋の「買う／売る／鑑定」 */
+  private shopTab: ShopTab = 'buy';
+  /** 神殿で直前に授かったSPの数 */
+  private templeGot = 0;
   /** 売るボタンを一度押した本（もう一度押すと売る） */
   private sellConfirm = '';
   private statEls: Record<Stat, HTMLElement>;
@@ -79,7 +105,7 @@ export class UI {
         <div class="slot item"><span class="key">R</span><span class="icon">💧</span><span class="cnt ethers"></span></div>
       </div>
       <div class="log"></div>
-      <div class="help">[K] スキルブック　[I] 装備　[Esc] ヘルプ</div>
+      <div class="help">[K] スキルブック　[C] 装備　[I] アイテム　[Esc] ヘルプ</div>
       <div class="modal hidden"></div>`;
     const q = (s: string) => root.querySelector(s) as HTMLElement;
     this.hpFill = q('.bar.hp .fill');
@@ -218,8 +244,12 @@ export class UI {
   handleKeys(inp: Input) {
     if (!this.kind) return;
     if (this.closable && inp.pressed('Escape')) this.close();
-    else if (this.kind === 'book' && inp.pressed('KeyK', 'Tab')) this.close();
-    else if (this.kind === 'equip' && inp.pressed('KeyI')) this.close();
+    else if (this.kind === 'menu') {
+      // 開いているタブのキーなら閉じ、ほかのタブのキーならそのタブへ。Tab は次のタブへ順に切り替える
+      const tab = menuTabKey(inp);
+      if (tab) tab === this.menuTab ? this.close() : this.showMenu(tab);
+      else if (inp.pressed('Tab')) this.showMenu(MENU_TABS[(MENU_TABS.indexOf(this.menuTab) + 1) % MENU_TABS.length]);
+    }
   }
 
   showTitle() {
@@ -262,14 +292,14 @@ export class UI {
             <br>・<b>技の書</b>（剣技・魔術・盾術）：決まったレベルで技を覚える。<b>剣の技は剣、魔術は杖、盾の技は盾</b>を装備しているときだけ使える。アクティブな技はホットバー(1〜5)にセットして使う。
             <br>・<b>2段階の書</b>（危険度5以上の階の宝箱で見つかる）：1段目の技で「剣気」などの<b>状態</b>に入ると、<b>そのフロアにいる間</b>パラメタが少し上がり、2段目の大技が何度でも使えるようになる。階段を降りたり町へ戻ったりすると状態は解ける。</li>
           <li><b>攻撃力</b>は通常攻撃と剣・盾の技、<b>魔力</b>は杖の攻撃と魔術の威力を上げる。<b>防御力</b>が高いほど受けるダメージが減り（防御力50で半分）、盾の技の威力も上がる。<b>運</b>が高いと会心の一撃（ダメージ1.5倍）が出やすくなり、敵がアイテムやゴールドを多く落とす。</li>
-          <li><b>SP</b>は敵を倒して得た<b>経験値(EXP)</b>を変換して獲得する。変換するたびに必要EXPは増えていく。</li>
+          <li><b>SP</b>は敵を倒して得た<b>経験値(EXP)</b>を、町の<b>神殿</b>で変換してもらって獲得する。変換するたびに必要EXPは増えていく。</li>
           <li>初級・中級の書は<b>道具屋</b>で買える（中級は危険度3の階に到達すると入荷）。上級の書と二段の書は<b>ダンジョンの宝箱</b>から見つかる。</li>
           <li>本は手に入れた時点では<b>レベル0（効果なし）</b>。SPでレベルを上げると効果が出る。</li>
-          <li>宝箱で拾った本は<b>呪われていて</b>、正体が分からず使えない。町の<b>神殿</b>でゴールドを払って浄化すると、正体が分かり使えるようになる。呪われた本はかばんの枠を使わない。</li>
+          <li>宝箱で拾った本は<b>未鑑定</b>で、正体が分からず使えない。<b>道具屋の「鑑定」</b>でゴールドを払って鑑定してもらうと、正体が分かり使えるようになる。未鑑定の本はかばんの枠を使わない。</li>
           <li>宝箱からは持っている本と<b>同じ本</b>が出ることもある。同じ本は<b>予備</b>になり、<b>道具屋の「本を売る」</b>で売れる。使っている本も売れる（上げるのに使ったSPは全部戻り、その本の技は忘れる）。</li>
           <li>持ち歩けるスキルブックは<b>3冊まで</b>。残りは<b>わが家の本棚</b>にしまい、家で入れ替える。本棚にある本のスキルは、覚えていても使えず、レベルも上げられない。</li>
           <li>体力・MPの上限は<b>100で固定</b>。スキルブックと装備で強くなろう。</li>
-          <li><b>武器防具屋</b>では武器（剣・杖・盾）と鎧を売っている。剣は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、杖なら魔力の弾、盾なら盾で殴る。危険度の高い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。買った装備はその場で身につけ、外した装備は<b>わが家のBOX</b>にしまわれる。装備の持ち替えはBOXでできる。鉱石はダンジョンの壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
+          <li><b>武器防具屋</b>では武器（剣・杖・盾）と鎧を売っている。剣は攻撃力、杖は魔力、盾と鎧は防御力を上げる。通常攻撃は、剣なら斬る、杖なら魔力の弾、盾なら盾で殴る。危険度の高い階に到達すると品ぞろえが増える。店の<b>鍛冶場</b>では、代金と<b>鉱石</b>で持っている装備を最大+5まで鍛えられる。<b>装備を売る</b>タブでは、使わない装備を買い取ってもらえる（値段と鍛えた代金の合計の半額。装備中の品は売れない）。買った装備はその場で身につけ、外した装備は<b>わが家のボックス</b>にしまわれる。装備の持ち替えはボックスでできる。鉱石はダンジョンの壁ぎわの鉱脈を [E] で3回たたいて掘るほか、敵（特にゴーレム）や宝箱からも手に入る。</li>
           <li>魔物は倒すと、ときどき<b>素材</b>（スライムゼリー・コウモリの翼・ゴブリンの牙など）を落とす。武器防具屋の<b>装備作成</b>タブで、素材と鉱石から<b>店では買えない特別な武器と防具</b>を作れる。作った装備には追加効果がある。</li>
           <li>わが家のベッドで休むと全回復＆セーブ。夕方6時から朝6時のあいだにベッドに入ると、次の朝まで眠る。倒れると所持金の半分を失って町へ戻される。</li>
           <li>町には<b>1日</b>の流れがある（現実の12分で1日。メニューを開いているあいだは時間が止まる）。朝焼け・夕焼けに染まり、夜は街灯や窓に灯りがともる。日付は夜明け（5時）に変わる。</li>
@@ -342,10 +372,10 @@ export class UI {
       const n = i + 1;
       return `<li class="${n <= lv ? 'on' : ''} ${n === lv ? 'cur' : ''}"><span class="n">Lv${n}</span>${this.bookEffect(b, n).replace(/^\S+ /, '')}</li>`;
     }).join('');
-    let state: string;
+    // 効果がないときだけ、その理由を知らせる
+    let state = '';
     if (!carried) state = '<span class="lock">本棚にあるので効果がない</span>';
     else if (lv < 1) state = '<span class="lock">Lv0なので効果がない。SPでレベルを上げよう</span>';
-    else state = '<span class="done">かばんに入れている間、効果がある</span>';
     return `
       <div class="effect-card ${b.kind}">
         <div class="ecur"><div class="elbl">いまの効果</div><div class="eval">${cur}</div>${b.stat?.key === 'luck' ? `<div class="elbl">運の合計 ${g.stat('luck')}：${luckText(g.stat('luck'))}</div>` : ''}${state}</div>
@@ -353,12 +383,101 @@ export class UI {
       </div>`;
   }
 
-  showSkillbook() {
+  /** スキルブックと装備をまとめたウィンドウ。tab を省くと前回のタブで開く */
+  showMenu(tab: MenuTab = this.menuTab) {
+    this.menuTab = tab;
     const g = this.game;
     const d = g.data;
-    // かばんに入れている本だけを載せる（本棚の本・呪われた本は載せない）
+    const tabBtn = (id: MenuTab, label: string) =>
+      `<button class="tab ${tab === id ? 'on' : ''}" data-act="mtab" data-arg="${id}">${label} <small>[${MENU_KEY[id].label}]</small></button>`;
+    const stats = `<div class="pstats">
+            <span>SP <b class="spv">${d.sp}</b></span>
+            <span>EXP <b>${d.exp}</b> / ${spCost(d.spBought)}</span>
+          </div>`;
+    this.open(
+      'menu',
+      `<div class="panel book-panel">
+        <div class="phead">
+          <div class="tabs mtabs">${tabBtn('book', '📖 スキルブック')}${tabBtn('equip', '🛡️ 装備')}${tabBtn('items', '🧪 アイテム')}</div>
+          ${stats}
+          <button class="x" data-act="close">✕</button>
+        </div>
+        <div class="bparams">${this.menuParams()}</div>
+        ${tab === 'book' ? this.bookTab() : tab === 'equip' ? this.equipTab() : this.itemsTab()}
+      </div>`,
+      (act, arg) => {
+        if (act === 'close') return this.close();
+        if (act === 'mtab') return this.showMenu(arg === 'equip' || arg === 'items' ? arg : 'book');
+        if (act === 'use') {
+          if (arg === 'ether') g.useEther();
+          else g.usePotion();
+          return this.showMenu();
+        }
+        if (act === 'book') this.bookSel = arg;
+        else if (act === 'lvup') g.levelUpBook(arg);
+        else if (act === 'slot') {
+          const [id, i] = arg.split(':');
+          g.assignSlot(id, Number(i));
+        }
+        const scroll = this.modal.querySelector('.book-detail')?.scrollTop ?? 0;
+        const keepScroll = act !== 'book';
+        this.showMenu();
+        const det = this.modal.querySelector('.book-detail');
+        if (det && keepScroll) det.scrollTop = scroll;
+      },
+    );
+  }
+
+  /** 消費アイテムのタブの中身（その場で使える） */
+  private itemsTab(): string {
+    const g = this.game;
+    const d = g.data;
+    const p = g.player;
+    const items = [
+      { id: 'potion', icon: '🧪', name: '回復薬', key: 'Q', desc: '体力を50回復する。', have: d.potions, now: `体力 ${Math.ceil(p.hp)} / ${MAX_HP}`, full: p.hp >= MAX_HP, fullTxt: '体力は満タン' },
+      { id: 'ether', icon: '💧', name: 'エーテル', key: 'R', desc: 'MPを50回復する。', have: d.ethers, now: `MP ${Math.floor(p.mp)} / ${MAX_MP}`, full: p.mp >= MAX_MP, fullTxt: 'MPは満タン' },
+    ];
+    const rows = items
+      .map((it) => {
+        const act =
+          it.have <= 0
+            ? '<span class="lock">持っていない</span>'
+            : it.full
+              ? `<span class="done">${it.fullTxt}</span>`
+              : `<button data-act="use" data-arg="${it.id}">使う</button>`;
+        return `<div class="srow ${it.have <= 0 ? 'learned' : ''}">
+          <div class="sicon">${it.icon}</div>
+          <div class="sinfo"><div class="sname">${it.name} <small>×${it.have}</small><span class="ikey">[${it.key}]</span></div><div class="sdesc">${it.desc}<br><small>いまの${it.now}</small></div></div>
+          <div class="sact">${act}</div>
+        </div>`;
+      })
+      .join('');
+    return `<div class="shop-list item-list">${rows}</div>`;
+  }
+
+  /** タブの外に出す、パラメタの合計（そのうち装備による分も添える） */
+  private menuParams(): string {
+    const g = this.game;
+    const d = g.data;
+    const w = weaponById(d.weapon);
+    const a = armorById(d.armor);
+    const fromEq = (k: Stat) => weaponStat(w, k, g.plusOf(w.id)) + (k === 'def' ? armorDef(a, g.plusOf(a.id)) : 0);
+    const cut = Math.round((1 - damageRate(g.stat('def'))) * 100);
+    return (
+      STATS.map((k) => {
+        const v = g.stat(k);
+        const eq = fromEq(k);
+        return `<span class="${v > g.baseStat(k) ? 'up' : ''}" ${k === 'luck' ? `title="${luckText(v)}"` : ''}>${STAT_ICON[k]} ${STAT_NAME[k]} <b>+${v}</b>${eq > 0 ? `<small class="peq">装備 +${eq}</small>` : ''}</span>`;
+      }).join('') + `<span class="luckfx">受けるダメージ -${cut}%　${luckText(g.stat('luck'))}</span>`
+    );
+  }
+
+  /** スキルブックのタブの中身 */
+  private bookTab(): string {
+    const g = this.game;
+    const d = g.data;
+    // かばんに入れている本だけを載せる（本棚の本・未鑑定の本は載せない）
     if (!d.carried.includes(this.bookSel)) this.bookSel = d.carried[0] ?? '';
-    const cost = spCost(d.spBought);
     const item = (b: BookDef) => {
       const lv = g.bookLv(b.id);
       const max = bookMaxLv(b);
@@ -375,52 +494,16 @@ export class UI {
     const slots = d.hotbar
       .map((id, i) => `<div class="hslot"><span class="k">${i + 1}</span>${id ? `${SKILLS[id].icon} ${SKILLS[id].name}` : '<em>空き</em>'}</div>`)
       .join('');
-    const params = STATS.map((k) => {
-        const v = g.stat(k);
-        return `<span class="${v > g.baseStat(k) ? 'up' : ''}" ${k === 'luck' ? `title="${luckText(v)}"` : ''}>${STAT_ICON[k]} ${STAT_NAME[k]} <b>${v}</b></span>`;
-      })
-      .join('') + `<span class="luckfx">${luckText(g.stat('luck'))}</span>`;
-
-    this.open(
-      'book',
-      `<div class="panel book-panel">
-        <div class="phead">
-          <h2>📖 スキルブック</h2>
-          <div class="pstats">
-            <span>SP <b class="spv">${d.sp}</b></span>
-            <span>EXP <b>${d.exp}</b></span>
-            <button data-act="convert" ${d.exp >= cost ? '' : 'disabled'}>EXP ${cost} → SP +1</button>
-          </div>
-          <button class="x" data-act="close">✕</button>
-        </div>
-        <div class="bparams">${params}</div>
+    return `
         <div class="book-body">
           <ul class="book-list">
             ${list}
-            <li class="hint">かばんの本だけが載っている。本棚の本は家で持ち替えよう。<br>本は道具屋やダンジョンの宝箱で手に入る。宝箱の本は呪われているので、神殿で浄化しよう。同じ本は予備になり、道具屋で売れる。<br>本はLv0（効果なし）から始まる。<br>持ち歩けるのは${MAX_CARRY}冊まで</li>
           </ul>
           <div class="book-detail">
             ${detail}
           </div>
         </div>
-        <div class="hotbar-edit"><span class="hl">ホットバー</span>${slots}</div>
-      </div>`,
-      (act, arg) => {
-        if (act === 'close') return this.close();
-        if (act === 'book') this.bookSel = arg;
-        else if (act === 'convert') g.convertExp();
-        else if (act === 'lvup') g.levelUpBook(arg);
-        else if (act === 'slot') {
-          const [id, i] = arg.split(':');
-          g.assignSlot(id, Number(i));
-        }
-        const scroll = this.modal.querySelector('.book-detail')?.scrollTop ?? 0;
-        const keepScroll = act !== 'book';
-        this.showSkillbook();
-        const det = this.modal.querySelector('.book-detail');
-        if (det && keepScroll) det.scrollTop = scroll;
-      },
-    );
+        <div class="hotbar-edit"><span class="hl">ホットバー</span>${slots}</div>`;
   }
 
   /** スキルブックの右側：選んだ本の詳細 */
@@ -440,24 +523,17 @@ export class UI {
     }).join('');
     const lvAct =
       lv >= max
-        ? '<span class="done">最大レベル</span>'
+        ? ''
         : `<button data-act="lvup" data-arg="${book.id}" ${d.sp >= lvCost ? '' : 'disabled'}>レベルアップ <small>SP ${lvCost}</small></button>`;
-    let nextTxt: string;
-    if (book.kind === 'tech') {
-      const next = book.skills.map((id) => SKILLS[id]).filter((sk) => sk.lv > lv).sort((a, b) => a.lv - b.lv)[0];
-      nextTxt = next ? `次は <b>Lv${next.lv}</b> で新しい技を覚える` : 'この本の技をすべて覚えた！';
-    } else {
-      nextTxt = lv < max ? `次の <b>Lv${lv + 1}</b> で ${this.bookEffect(book, lv + 1)}` : 'これ以上は強くならない。';
-    }
     const wt = book.school ? SCHOOL_WEAPON[book.school] : null;
-    const need = wt
-      ? `<div class="wneed ${g.weaponType === wt ? 'ok' : 'ng'}">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}を装備しているときだけ使える${g.weaponType === wt ? '' : '（いまは装備していない）'}</div>`
+    // 使える武器を装備していないときだけ知らせる
+    const need = wt && g.weaponType !== wt
+      ? `<div class="wneed ng">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}を装備しているときだけ使える</div>`
       : '';
     const body = book.kind === 'tech' ? need + book.skills.map((id) => this.skillCard(id)).join('') : this.effectCard(book);
     const head = `<div class="bhead" style="--c:${book.color}">
               <h3>${book.name}<span class="ktag ${book.kind}">${bookTag(book)}</span><span class="blv">Lv ${lv} / ${max}</span></h3><p>${book.desc}</p>
               <div class="lvrow"><div class="lvtrack">${track}</div><div class="lvact">${lvAct}</div></div>
-              <div class="lvnext">${nextTxt}</div>
               ${g.sparesOf(book.id) ? `<div class="lvnext">同じ本の予備が <b>${g.sparesOf(book.id)}冊</b> ある（道具屋で ${sellPrice(book)} G で売れる）</div>` : ''}
             </div>`;
     return head + body;
@@ -465,8 +541,8 @@ export class UI {
 
   // ---------------------------------------------------------------- 装備
 
-  /** 装備の確認（見るだけ。持ち替えはわが家のBOX、鍛えるのは町の武器防具屋） */
-  showEquipment() {
+  /** 装備のタブの中身（見るだけ。持ち替えはわが家のボックス、鍛えるのは町の武器防具屋） */
+  private equipTab(): string {
     const g = this.game;
     const d = g.data;
     const w = weaponById(d.weapon);
@@ -485,55 +561,18 @@ export class UI {
           <div class="sdesc">${desc}</div>
         </div>
       </div>`;
-    const wt = g.weaponType;
-    const now =
-      card('武器', w.icon, w.name, wp, weaponStatText(w, wp), w.effect && WEAPON_EFFECT_TEXT[w.effect], w.desc) +
-      `<div class="wneed ok">${WEAPON_TYPE_ICON[wt]} ${WEAPON_TYPE_NAME[wt]}の技が使える</div>` +
-      card('防具', a.icon, a.name, ap, `防御力 +${armorDef(a, ap)}`, a.effect && ARMOR_EFFECT_TEXT[a.effect], a.desc);
-
-    // パラメタ：合計と、そのうち装備による分
-    const fromEq = (k: Stat) => weaponStat(w, k, wp) + (k === 'def' ? armorDef(a, ap) : 0);
-    const params = STATS.map((k) => {
-      const eq = fromEq(k);
-      return `<div class="eparam"><span class="k">${STAT_ICON[k]} ${STAT_NAME[k]}</span><b>${g.stat(k)}</b><small>${eq > 0 ? `装備 +${eq}` : ''}</small></div>`;
-    }).join('');
-    const cut = Math.round((1 - damageRate(g.stat('def'))) * 100);
-
-    // 持っている装備（いま装備しているものに印をつける）
-    const ownedRow = (icon: string, name: string, plus: number, stat: string, on: boolean) =>
-      `<li class="${on ? 'on' : ''}"><span class="i">${icon}</span><span class="n">${eqName(name, plus)}</span><small>${stat}</small>${on ? '<em>装備中</em>' : ''}</li>`;
-    const ownedW = WEAPONS.filter((x) => d.weapons.includes(x.id))
-      .map((x) => ownedRow(x.icon, x.name, g.plusOf(x.id), weaponStatText(x, g.plusOf(x.id)), x.id === d.weapon))
-      .join('');
-    const ownedA = ARMORS.filter((x) => d.armors.includes(x.id))
-      .map((x) => ownedRow(x.icon, x.name, g.plusOf(x.id), `防御力 +${armorDef(x, g.plusOf(x.id))}`, x.id === d.armor))
-      .join('');
-
-    this.open(
-      'equip',
-      `<div class="panel equip-panel">
-        <div class="phead"><h2>🛡️ 装備</h2><button class="x" data-act="close">✕</button></div>
+    return `
         <div class="equip-body">
           <section>
-            <h4>装備中</h4>
-            ${now}
-            <h4>パラメタ</h4>
-            <div class="eparams">${params}</div>
-            <p class="note">受けるダメージ -${cut}%（防御力 ${g.stat('def')}）</p>
+            <h4>武器</h4>
+            ${card('武器', w.icon, w.name, wp, weaponStatText(w, wp), w.effect && WEAPON_EFFECT_TEXT[w.effect], w.desc)}
           </section>
           <section>
-            <h4>持っている武器（${d.weapons.length}）</h4>
-            <ul class="eqlist">${ownedW}</ul>
-            <h4>持っている防具（${d.armors.length}）</h4>
-            <ul class="eqlist">${ownedA}</ul>
-            <p class="note">装備していない武器・防具は、わが家のBOXにしまってある。持ち替えはBOXで、鍛冶は町の武器防具屋でできる。</p>
+            <h4>防具</h4>
+            ${card('防具', a.icon, a.name, ap, `防御力 +${armorDef(a, ap)}`, a.effect && ARMOR_EFFECT_TEXT[a.effect], a.desc)}
           </section>
         </div>
-      </div>`,
-      (act) => {
-        if (act === 'close') this.close();
-      },
-    );
+`;
   }
 
   // ---------------------------------------------------------------- 本棚
@@ -579,8 +618,8 @@ export class UI {
     this.open(
       'shelf',
       `<div class="panel shelf-panel">
-        <div class="phead"><h2>📚 本棚</h2><div class="pstats"><span>かばん <b>${bag.length}</b> / ${MAX_CARRY} 冊</span></div><button class="x" data-act="close">✕</button></div>
-        <p class="note">持ち歩けるスキルブックは${MAX_CARRY}冊まで。本棚にある本のスキルは、習得していても使えない。どの本を持っていくか選ぼう。${d.cursed.length ? `<br>呪われた本が ${d.cursed.length} 冊ある。町の神殿で浄化しよう。` : ''}</p>
+        <div class="phead"><h2>📚 本棚</h2><button class="x" data-act="close">✕</button></div>
+        <p class="note">持ち歩けるスキルブックは${MAX_CARRY}冊まで。本棚にある本のスキルは、習得していても使えない。どの本を持っていくか選ぼう。${d.cursed.length ? `<br>未鑑定の本が ${d.cursed.length} 冊ある。町の道具屋で鑑定しよう。` : ''}</p>
         <div class="shelf-body">
           <section><h4>🎒 かばん（持ち歩く本）</h4>${bagHtml}</section>
           <section><h4>📚 本棚</h4>${shelfHtml}</section>
@@ -595,9 +634,9 @@ export class UI {
     );
   }
 
-  // ---------------------------------------------------------------- BOX（わが家）
+  // ---------------------------------------------------------------- ボックス（わが家）
 
-  /** わが家のBOX：装備していない武器・防具をしまっておき、ここで持ち替える */
+  /** わが家のボックス：装備していない武器・防具をしまっておき、ここで持ち替える（スキルブックと同じ、左に一覧・右に詳細） */
   showBox() {
     const g = this.game;
     const d = g.data;
@@ -605,77 +644,89 @@ export class UI {
     const ca = armorById(d.armor);
     const cwp = g.plusOf(cw.id);
     const cap = g.plusOf(ca.id);
-    const defTxt = (n: number) => `防御力 +${n}`;
-    // 武器の種類で使える技の系統（剣の技・魔術・盾の技）
-    const techOf = (t: WeaponType) => {
-      const sc = (Object.keys(SCHOOL_WEAPON) as School[]).find((k) => SCHOOL_WEAPON[k] === t)!;
-      return sc === 'magic' ? SCHOOL_NAME[sc] : `${SCHOOL_NAME[sc]}の技`;
-    };
-    // いまの装備と比べたパラメタの増減
-    const diff = (gain: Partial<Record<Stat, number>>) => {
-      const chips = STATS.filter((k) => gain[k])
-        .map((k) => {
-          const v = gain[k]!;
-          return `<span class="cmp ${v > 0 ? 'up' : 'down'}">${STAT_NAME[k]} ${v > 0 ? '+' : ''}${v}</span>`;
-        })
-        .join('');
-      return chips || '<span class="cmp">パラメタは変わらない</span>';
-    };
-    const row = (kind: 'weapon' | 'armor', id: string, icon: string, name: string, stat: string, desc: string, fx: string | undefined, extra: string, worn: boolean) => {
-      const plus = g.plusOf(id);
-      const act = worn ? '<span class="done">装備中</span>' : `<button data-act="equip" data-arg="${kind}:${id}">装備する</button>`;
-      return `<div class="srow ${worn ? 'equipped' : ''}">
-        <div class="sicon">${icon}</div>
-        <div class="sinfo"><div class="sname">${eqName(name, plus)}${worn ? '<span class="eqtag">装備中</span>' : ''}<span class="eqstat">${stat}</span></div>
-          <div class="sdesc">${desc}${fx ? `<br><span class="eqfx">✨ ${fx}</span>` : ''}${extra ? `<div class="cmps">${extra}</div>` : ''}</div></div>
-        <div class="sact">${act}</div>
-      </div>`;
-    };
-    const weaponRow = (x: WeaponDef, worn: boolean) => {
-      const p = g.plusOf(x.id);
-      const gain: Partial<Record<Stat, number>> = {};
-      for (const k of STATS) gain[k] = weaponStat(x, k, p) - weaponStat(cw, k, cwp);
-      const extra = worn ? '' : diff(gain) + (x.type !== cw.type ? `<span class="cmp swap">${WEAPON_TYPE_ICON[x.type]} ${techOf(x.type)}が使えるようになる（${techOf(cw.type)}は使えなくなる）</span>` : '');
-      return row('weapon', x.id, x.icon, x.name, `${WEAPON_TYPE_ICON[x.type]} ${weaponStatText(x, p)}`, x.desc, x.effect && WEAPON_EFFECT_TEXT[x.effect], extra, worn);
-    };
-    const armorRow = (x: ArmorDef, worn: boolean) => {
-      const p = g.plusOf(x.id);
-      const extra = worn ? '' : diff({ def: armorDef(x, p) - armorDef(ca, cap) });
-      return row('armor', x.id, x.icon, x.name, defTxt(armorDef(x, p)), x.desc, x.effect && ARMOR_EFFECT_TEXT[x.effect], extra, worn);
-    };
     const boxW = WEAPONS.filter((x) => d.weapons.includes(x.id) && x.id !== d.weapon);
     const boxA = ARMORS.filter((x) => d.armors.includes(x.id) && x.id !== d.armor);
-    const empty = '<p class="note">しまってあるものはない。</p>';
+
+    // 一覧の並び（"weapon:id" / "armor:id"）。選んでいる品がなくなっていたら、しまってある最初の品を選ぶ
+    const keys = [`weapon:${cw.id}`, `armor:${ca.id}`, ...boxW.map((x) => `weapon:${x.id}`), ...boxA.map((x) => `armor:${x.id}`)];
+    if (!keys.includes(this.boxSel)) this.boxSel = keys[2] ?? keys[0];
+
+    const item = (key: string, icon: string, name: string, plus: number, stat: string, worn: boolean) =>
+      `<li class="${key === this.boxSel ? 'sel' : ''}" data-act="sel" data-arg="${key}">
+          <span class="eqi">${icon}</span><span class="bn">${eqName(name, plus)}${worn ? '<i class="eqtag">装備中</i>' : ''}</span><small>${stat}</small></li>`;
+    const wItem = (x: WeaponDef, worn: boolean) => item(`weapon:${x.id}`, x.icon, x.name, g.plusOf(x.id), weaponStatText(x, g.plusOf(x.id)), worn);
+    const aItem = (x: ArmorDef, worn: boolean) => item(`armor:${x.id}`, x.icon, x.name, g.plusOf(x.id), `防御力 +${armorDef(x, g.plusOf(x.id))}`, worn);
+    const list =
+      `<li class="group">身につけている装備</li>${wItem(cw, true)}${aItem(ca, true)}` +
+      `<li class="group">📦 武器（${boxW.length}）</li>${boxW.map((x) => wItem(x, false)).join('') || '<li class="none">しまってある武器はない</li>'}` +
+      `<li class="group">📦 防具（${boxA.length}）</li>${boxA.map((x) => aItem(x, false)).join('') || '<li class="none">しまってある防具はない</li>'}`;
+
     this.open(
       'box',
-      `<div class="panel shop-panel box-panel">
-        <div class="phead"><h2>📦 BOX</h2><div class="pstats"><span>しまってある装備 <b>${boxW.length + boxA.length}</b></span></div><button class="x" data-act="close">✕</button></div>
-        <p class="note">装備していない武器と防具は、ここにしまってある。「装備する」を押すと、いま身につけている品と入れ替わる。</p>
-        <div class="shop-list">
-          <h4>身につけている装備</h4>
-          ${weaponRow(cw, true)}${armorRow(ca, true)}
-          <h4>BOXの中の武器（${boxW.length}）</h4>
-          ${boxW.map((x) => weaponRow(x, false)).join('') || empty}
-          <h4>BOXの中の防具（${boxA.length}）</h4>
-          ${boxA.map((x) => armorRow(x, false)).join('') || empty}
+      `<div class="panel book-panel box-panel">
+        <div class="phead"><h2>📦 ボックス</h2><button class="x" data-act="close">✕</button></div>
+        <div class="bparams">${this.menuParams()}</div>
+        <div class="book-body">
+          <ul class="book-list">${list}</ul>
+          <div class="book-detail">${this.boxDetail(this.boxSel, cw, cwp, ca, cap)}</div>
         </div>
       </div>`,
       (act, arg) => {
         if (act === 'close') return this.close();
-        if (act === 'equip') {
+        if (act === 'sel') this.boxSel = arg;
+        else if (act === 'equip') {
           const [kind, id] = arg.split(':');
           const k = kind === 'armor' ? 'armor' : 'weapon';
           const prev = k === 'weapon' ? weaponById(d.weapon) : armorById(d.armor);
           g.equip(k, id);
           const now = k === 'weapon' ? weaponById(d.weapon) : armorById(d.armor);
-          if (now.id === id && prev.id !== id) this.log(`${eqName(now.name, g.plusOf(now.id))}を装備し、${eqName(prev.name, g.plusOf(prev.id))}をBOXにしまった。`);
+          if (now.id === id && prev.id !== id) this.log(`${eqName(now.name, g.plusOf(now.id))}を装備し、${eqName(prev.name, g.plusOf(prev.id))}をボックスにしまった。`);
         }
-        const scroll = this.modal.querySelector('.shop-list')?.scrollTop ?? 0;
+        const list = this.modal.querySelector('.book-list')?.scrollTop ?? 0;
         this.showBox();
-        const nl = this.modal.querySelector('.shop-list');
-        if (nl) nl.scrollTop = scroll;
+        const nl = this.modal.querySelector('.book-list');
+        if (nl) nl.scrollTop = list;
       },
     );
+  }
+
+  /** ボックスの右側：選んだ装備の詳細と、いまの装備との比べ */
+  private boxDetail(key: string, cw: WeaponDef, cwp: number, ca: ArmorDef, cap: number): string {
+    const g = this.game;
+    const [kind, id] = key.split(':');
+    const isW = kind === 'weapon';
+    const x = isW ? weaponById(id) : armorById(id);
+    const p = g.plusOf(x.id);
+    const worn = x.id === (isW ? cw.id : ca.id);
+    const stat = isW ? `${WEAPON_TYPE_ICON[(x as WeaponDef).type]} ${weaponStatText(x as WeaponDef, p)}` : `防御力 +${armorDef(x as ArmorDef, p)}`;
+    const fx = isW ? (x as WeaponDef).effect && WEAPON_EFFECT_TEXT[(x as WeaponDef).effect!] : (x as ArmorDef).effect && ARMOR_EFFECT_TEXT[(x as ArmorDef).effect!];
+
+    // いまの装備と比べたパラメタの増減と、武器の種類が変わるときに使える技の系統
+    let cmp = '';
+    if (!worn) {
+      const gain: Partial<Record<Stat, number>> = {};
+      if (isW) for (const k of STATS) gain[k] = weaponStat(x as WeaponDef, k, p) - weaponStat(cw, k, cwp);
+      else gain.def = armorDef(x as ArmorDef, p) - armorDef(ca, cap);
+      const chips = STATS.filter((k) => gain[k])
+        .map((k) => `<span class="cmp ${gain[k]! > 0 ? 'up' : 'down'}">${STAT_NAME[k]} ${gain[k]! > 0 ? '+' : ''}${gain[k]}</span>`)
+        .join('');
+      const techOf = (t: WeaponType) => {
+        const sc = (Object.keys(SCHOOL_WEAPON) as School[]).find((k) => SCHOOL_WEAPON[k] === t)!;
+        return sc === 'magic' ? SCHOOL_NAME[sc] : `${SCHOOL_NAME[sc]}の技`;
+      };
+      const t = isW ? (x as WeaponDef).type : null;
+      const swap = t && t !== cw.type ? `<span class="cmp swap">${WEAPON_TYPE_ICON[t]} ${techOf(t)}が使えるようになる（${techOf(cw.type)}は使えなくなる）</span>` : '';
+      const now = isW ? eqName(cw.name, cwp) : eqName(ca.name, cap);
+      cmp = `<h4>いまの装備（${now}）と比べると</h4><div class="cmps">${chips || '<span class="cmp">パラメタは変わらない</span>'}${swap}</div>`;
+    }
+    const act = worn ? '<span class="done">装備中</span>' : `<button data-act="equip" data-arg="${key}">装備する</button>`;
+    return `<div class="bhead">
+              <h3><span class="eqi">${x.icon}</span>${eqName(x.name, p)}<span class="blv">${isW ? '武器' : '防具'}</span></h3>
+              <p>${x.desc}</p>
+              <div class="lvrow"><div class="estat">${stat}<span class="eplus">鍛冶 +${p} / ${MAX_PLUS}</span></div><div class="lvact">${act}</div></div>
+              ${fx ? `<div class="efx">✨ ${fx}</div>` : ''}
+            </div>
+            ${cmp}`;
   }
 
   // ---------------------------------------------------------------- セール
@@ -687,14 +738,15 @@ export class UI {
   }
 
   /** お店の上に出す今日のセールの知らせ */
-  private saleBanner(shop: 'shop' | 'smithy'): string {
+  /** 取引画面の上に、今日のセールを別ウィンドウで添える（セールがない日はそのまま） */
+  private withSale(shop: 'shop' | 'smithy', panel: string): string {
     const s = this.game.todaySale();
-    if (!s) return '';
-    if (s.shop !== shop) {
-      const other = s.shop === 'shop' ? '道具屋' : '武器防具屋';
-      return `<p class="salebar other">🏷️ 今日は${other}で${s.name}が${offText(s.off)}らしい。</p>`;
-    }
-    return `<p class="salebar">🏷️ 本日限りのセール！ <b>${s.name}</b>が<b>${offText(s.off)}</b>！</p>`;
+    if (!s) return panel;
+    const win =
+      s.shop === shop
+        ? `<div class="salewin">🏷️ 本日限りのセール！ <b>${s.name}</b>が<b>${offText(s.off)}</b>！</div>`
+        : `<div class="salewin other">🏷️ 今日は${s.shop === 'shop' ? '道具屋' : '武器防具屋'}で${s.name}が${offText(s.off)}らしい。</div>`;
+    return `<div class="modal-stack">${win}${panel}</div>`;
   }
 
   // ---------------------------------------------------------------- 道具屋
@@ -736,13 +788,13 @@ export class UI {
         .sort((a, b) => a.tier - b.tier)
         .map(bookRow)
         .join('');
-    const tabBtn = (id: 'buy' | 'sell', label: string) => `<button class="tab ${this.shopTab === id ? 'on' : ''}" data-act="tab" data-arg="${id}">${label}</button>`;
-    const tabs = `<div class="tabs">${tabBtn('buy', '🛒 買う')}${tabBtn('sell', '💰 本を売る')}</div>`;
+    const tabBtn = (id: ShopTab, label: string) => `<button class="tab ${this.shopTab === id ? 'on' : ''}" data-act="tab" data-arg="${id}">${label}</button>`;
+    const tabs = `<div class="tabs">${tabBtn('buy', '🛒 買う')}${tabBtn('sell', '💰 本を売る')}${tabBtn('appraise', `🔍 鑑定${d.cursed.length ? ` (${d.cursed.length})` : ''}`)}</div>`;
     const buyList = `
           <h4>道具</h4>${itemRows}
           <h4>技の書</h4>${bookRows('tech')}
           <h4>パラメタの書</h4>${bookRows('stat')}
-          <p class="note">上級の書と、二段構えの技を収めた「二段」の書は、ダンジョンの宝箱で見つかるらしい。ただし宝箱の本は呪われていて、神殿で浄化するまで使えないそうだ。</p>`;
+          <p class="note">上級の書と、二段構えの技を収めた「二段」の書は、ダンジョンの宝箱で見つかるらしい。ただし宝箱の本は未鑑定で、うちで鑑定するまで使えないぜ。</p>`;
     const sellRow = (b: BookDef) => {
       const price = sellPrice(b);
       const lv = g.bookLv(b.id);
@@ -774,26 +826,29 @@ export class UI {
     const sellList = `
           <p class="note">いらなくなった本や、同じ本の予備を買い取ってもらえる。店の本は売値の半額、ダンジョンの本はパラメタ 300 G・技 500 G。売った本は、また道具屋で買ったり宝箱で見つけたりできる。</p>
           ${[...owned.filter((b) => g.sparesOf(b.id) > 0), ...owned.filter((b) => g.sparesOf(b.id) === 0)].map(sellRow).join('')}
-          ${d.cursed.length ? `<p class="note">呪われた本（${d.cursed.length}冊）は買い取れない。神殿で浄化してから持ってこよう。</p>` : ''}`;
+          ${d.cursed.length ? `<p class="note">未鑑定の本（${d.cursed.length}冊）は買い取れない。「鑑定」タブで鑑定してから売ろう。</p>` : ''}`;
     this.open(
       'shop',
-      `<div class="panel shop-panel">
+      this.withSale('shop', `<div class="panel shop-panel">
         <div class="phead"><h2>🏪 道具屋</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
-        ${this.saleBanner('shop')}
-        <p class="npc">${this.shopTab === 'buy' ? '店主「いらっしゃい！ ダンジョンに潜るなら準備は万全にな。技の書もパラメタの書も揃ってるぜ。」' : '店主「本の買い取りかい？ ダブった本なら、いい値で引き取るぜ。」'}</p>
+        <p class="npc">${SHOP_TALK[this.shopTab]}</p>
         ${tabs}
-        <div class="shop-list">${this.shopTab === 'buy' ? buyList : sellList}
+        <div class="shop-list">${this.shopTab === 'buy' ? buyList : this.shopTab === 'sell' ? sellList : this.appraiseList()}
         </div>
-      </div>`,
+      </div>`),
       (act, arg) => {
         if (act === 'close') {
           this.shopTab = 'buy';
           this.sellConfirm = '';
+          this.revealed = '';
           return this.close();
         }
         const prev = this.sellConfirm;
         this.sellConfirm = '';
-        if (act === 'tab') this.shopTab = arg === 'sell' ? 'sell' : 'buy';
+        if (act === 'tab') {
+          this.shopTab = arg === 'sell' || arg === 'appraise' ? arg : 'buy';
+          this.revealed = '';
+        } else if (act === 'appraise') this.appraise(Number(arg));
         else if (act === 'buy') g.buyItem(arg === 'ether' ? 'ether' : 'potion');
         else if (act === 'buybook') g.buyBook(arg);
         else if (act === 'sellspare') g.sellSpare(arg);
@@ -839,7 +894,7 @@ export class UI {
     let npc: string;
     let section: (kind: 'weapon' | 'armor') => string;
     if (this.smithyTab === 'shop') {
-      npc = '親方「体力ばかりは鍛えても増えんからな。そのぶん、いい武器といい鎧で補うんだ。技の書を使うなら、剣の技は剣、魔術は杖、盾の技は盾を持っていけよ。買った品はその場で着けていきな。外した品は家のBOXに届けておく。」';
+      npc = '親方「体力ばかりは鍛えても増えんからな。そのぶん、いい武器といい鎧で補うんだ。技の書を使うなら、剣の技は剣、魔術は杖、盾の技は盾を持っていけよ。買った品はその場で着けていきな。外した品は家のボックスに届けておく。」';
       section = (kind) =>
         items
           .filter((it) => it.kind === kind && !it.craft)
@@ -851,7 +906,7 @@ export class UI {
             const act = equipped
               ? '<span class="done">装備中</span>'
               : owned
-                ? '<span class="done">📦 BOXにある</span>'
+                ? '<span class="done">📦 ボックスにある</span>'
                 : locked
                   ? `<span class="lock">危険度${it.minFloor}の階に<br>到達で入荷</span>`
                   : `<button data-act="buyeq" data-arg="${it.kind}:${it.id}" ${d.gold >= g.priceOf(it.kind, it.price) ? '' : 'disabled'}>${this.priceHtml(it.kind, it.price)}</button>`;
@@ -879,7 +934,7 @@ export class UI {
                 const act = wears(it)
                   ? '<span class="done">装備中</span>'
                   : owns(it)
-                    ? '<span class="done">📦 BOXにある</span>'
+                    ? '<span class="done">📦 ボックスにある</span>'
                     : locked
                       ? `<span class="lock">危険度${it.minFloor}の階に到達で<br>作り方が分かる</span>`
                       : `<button data-act="craft" data-arg="${it.kind}:${it.id}" ${g.canCraft(r) ? '' : 'disabled'}>作る<br><small>${this.priceHtml('craft', r.gold)}</small></button>`;
@@ -909,7 +964,7 @@ export class UI {
               note = '';
             } else if (wears(it)) {
               act = '<span class="lock">装備中なので<br>売れない</span>';
-              note = 'わが家のBOXでほかの装備に持ち替えると売れる。';
+              note = 'わが家のボックスでほかの装備に持ち替えると売れる。';
             } else {
               act =
                 this.eqConfirm === key
@@ -956,10 +1011,9 @@ export class UI {
 
     this.open(
       'smithy',
-      `<div class="panel shop-panel">
+      this.withSale('smithy', `<div class="panel shop-panel">
         <div class="phead"><h2>⚒️ 武器防具屋</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
         ${tabs}
-        ${this.saleBanner('smithy')}
         <p class="npc">${npc}</p>
         ${eqnow}
         ${this.smithyTab === 'sell' ? '<p class="note">買い取り値は、売り場の値段と鍛えるのに払った代金を合わせた半額。装備中の品は売れない。</p>' : ''}
@@ -969,7 +1023,7 @@ export class UI {
           ${this.smithyTab === 'craft' ? `<h4>作れる武器</h4>${section('weapon')}<h4>作れる防具</h4>${section('armor')}` : `<h4>武器</h4>${section('weapon')}
           <h4>防具</h4>${section('armor')}`}
         </div>
-      </div>`,
+      </div>`),
       (act, arg) => {
         const prev = this.eqConfirm;
         this.eqConfirm = '';
@@ -991,31 +1045,31 @@ export class UI {
     );
   }
 
-  // ---------------------------------------------------------------- 神殿
+  // ---------------------------------------------------------------- 道具屋の鑑定
 
-  /** 呪われた本の呼び名（拾った順の通し番号をつける） */
-  private cursedName(c: CursedBook): string {
-    return `${CURSED_NAME} #${c.no}`;
+  /** 未鑑定の本の呼び名（拾った順の通し番号をつける） */
+  private unidentifiedName(c: UnidentifiedBook): string {
+    return `${UNIDENTIFIED_NAME} #${c.no}`;
   }
 
-  showTemple() {
-    const g = this.game;
-    const d = g.data;
+  /** 道具屋の「鑑定」タブの中身 */
+  private appraiseList(): string {
+    const d = this.game.data;
     const rows = d.cursed
       .map((c) => {
         const b = bookById(c.book);
-        const price = purifyPrice(b);
-        return `<div class="srow cursed">
-          <div class="sicon book" style="--c:${CURSE_COLOR}">📕</div>
-          <div class="sinfo"><div class="sname">${this.cursedName(c)}<span class="ktag curse">正体不明</span></div><div class="sdesc"><span class="cpow ${b.kind}">${CURSE_POWER[b.kind]}</span>がかかっている。</div></div>
-          <div class="sact"><button data-act="purify" data-arg="${c.no}" ${d.gold >= price ? '' : 'disabled'}>浄化する<br><small>${price} G</small></button></div>
+        const price = appraisePrice(b);
+        return `<div class="srow unid">
+          <div class="sicon book" style="--c:${UNIDENTIFIED_COLOR}">📕</div>
+          <div class="sinfo"><div class="sname">${this.unidentifiedName(c)}<span class="ktag unid">正体不明</span></div><div class="sdesc"><span class="cpow ${b.kind}">${APPRAISE_HINT[b.kind]}</span>を秘めているようだ。</div></div>
+          <div class="sact"><button data-act="appraise" data-arg="${c.no}" ${d.gold >= price ? '' : 'disabled'}>鑑定する<br><small>${price} G</small></button></div>
         </div>`;
       })
       .join('');
     const rb = this.revealed ? bookById(this.revealed) : null;
     const reveal = rb
       ? `<div class="reveal" style="--c:${rb.color}">
-          <div class="rlbl">✨ 呪いが解けた！ 本の正体は…</div>
+          <div class="rlbl">🔍 鑑定が終わった！ 本の正体は…</div>
           <div class="srow learned">
             <div class="sicon book" style="--c:${rb.color}">📗</div>
             <div class="sinfo"><div class="sname">${rb.name}<span class="ktag ${rb.kind}">${bookTag(rb)}</span></div><div class="sdesc">${rb.desc}<br><small>${rb.kind === 'tech' ? '収録' : '効果'}: ${
@@ -1024,34 +1078,62 @@ export class UI {
                 : bookSummary(rb)
             }</small></div></div>
           </div>
-          <p class="note">${this.revealedSpare ? `すでに持っている本なので<b>予備</b>になった。道具屋で ${sellPrice(rb)} G で売れる。` : 'Lv0から始まる。スキルブック [K] でSPを使ってレベルを上げよう。'}</p>
+          <p class="note">${this.revealedSpare ? `すでに持っている本なので<b>予備</b>になった。「本を売る」タブで ${sellPrice(rb)} G で売れる。` : 'Lv0から始まる。スキルブック [K] でSPを使ってレベルを上げよう。'}</p>
         </div>`
+      : '';
+    return `
+          ${reveal}
+          <h4>未鑑定の本</h4>
+          ${rows || '<p class="note">未鑑定の本は持っていない。ダンジョンの宝箱で見つけた本は未鑑定なので、ここへ持ってこよう。</p>'}`;
+  }
+
+  /** 未鑑定の本（通し番号 no）を鑑定し、正体を見せる */
+  private appraise(no: number) {
+    const d = this.game.data;
+    const c = d.cursed.find((x) => x.no === no);
+    const spare = !!c && d.books.includes(c.book);
+    const id = this.game.appraiseBook(no);
+    if (id) {
+      this.revealed = id;
+      this.revealedSpare = spare;
+    }
+  }
+
+  // ---------------------------------------------------------------- 神殿
+
+  showTemple() {
+    const g = this.game;
+    const d = g.data;
+    const cost = spCost(d.spBought);
+    const ready = d.exp >= cost;
+    const got = this.templeGot
+      ? `<div class="reveal" style="--c:#f0d878"><div class="rlbl">✨ 神の祝福を受け、SP +${this.templeGot} を授かった！</div><p class="note">スキルブック [K] でSPを使って本のレベルを上げよう。</p></div>`
       : '';
     this.open(
       'temple',
       `<div class="panel shop-panel temple-panel">
-        <div class="phead"><h2>⛪ 神殿</h2><div class="pstats"><span>所持金 <b>${d.gold}</b> G</span></div><button class="x" data-act="close">✕</button></div>
-        <p class="npc">神官「ダンジョンの書には古の呪いが染みついております。祈りを捧げれば呪いは祓われ、本来の姿を取り戻しましょう。強い力を秘めた書ほど呪いも強く、お布施も多くいただきます。」</p>
+        <div class="phead"><h2>⛪ 神殿</h2><div class="pstats"><span>SP <b class="spv">${d.sp}</b></span><span>EXP <b>${d.exp}</b></span></div><button class="x" data-act="close">✕</button></div>
+        <p class="npc">神官「よくぞ戻られました。戦いで積んだ経験を祈りとして捧げれば、神はあなたに新たな力、スキルポイントを授けてくださいます。祈りを重ねるほど、より多くの経験が要りますぞ。」</p>
         <div class="shop-list">
-          ${reveal}
-          <h4>呪われた本</h4>
-          ${rows || '<p class="note">呪われた本は持っていない。ダンジョンの宝箱で見つけた本は呪われているので、ここへ持ってこよう。</p>'}
+          ${got}
+          <h4>経験値をスキルポイントに変える</h4>
+          <div class="srow">
+            <div class="sicon">🙏</div>
+            <div class="sinfo"><div class="sname">祈りを捧げる</div><div class="sdesc">EXP ${cost} を捧げて SP +1 を授かる。<br><small>${ready ? '祈りを捧げられる。' : `あと EXP ${cost - d.exp} 必要。`}</small></div></div>
+            <div class="sact sellact">
+              <button data-act="convert" ${ready ? '' : 'disabled'}>祈る<br><small>EXP ${cost} → SP +1</small></button>
+              <button data-act="convertall" ${ready ? '' : 'disabled'}>できるだけ祈る</button>
+            </div>
+          </div>
+          <p class="note">EXPは敵を倒すと手に入る。SPに変えるたびに、次に必要なEXPは増えていく。</p>
         </div>
       </div>`,
-      (act, arg) => {
+      (act) => {
         if (act === 'close') {
-          this.revealed = '';
+          this.templeGot = 0;
           return this.close();
         }
-        if (act === 'purify') {
-          const c = d.cursed.find((x) => x.no === Number(arg));
-          const spare = !!c && d.books.includes(c.book);
-          const id = g.purifyBook(Number(arg));
-          if (id) {
-            this.revealed = id;
-            this.revealedSpare = spare;
-          }
-        }
+        if (act === 'convert' || act === 'convertall') this.templeGot = g.convertExp(act === 'convertall');
         this.showTemple();
       },
     );

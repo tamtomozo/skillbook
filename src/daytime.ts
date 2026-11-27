@@ -40,9 +40,12 @@ export function sleepUntil(minutes: number): number {
   return minutes + 60;
 }
 
+/** 時刻の表示を切り替える間隔（分）。表示は 7:00 → 7:15 → 7:30 のように進む */
+export const CLOCK_STEP = 15;
+
 export const clockText = (minutes: number) => {
-  const c = clockOf(minutes);
-  return `${Math.floor(c / 60)}:${String(Math.floor(c % 60)).padStart(2, '0')}`;
+  const c = Math.floor(clockOf(minutes) / CLOCK_STEP) * CLOCK_STEP;
+  return `${Math.floor(c / 60)}:${String(c % 60).padStart(2, '0')}`;
 };
 
 // ---------------------------------------------------------------- 明るさ

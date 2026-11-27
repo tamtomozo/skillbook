@@ -470,15 +470,6 @@ button.x {
   color: #c8b89a;
 }
 
-.book-list li.hint {
-  cursor: default;
-  background: none;
-  font-size: 12px;
-  color: #a89a80;
-  display: block;
-  line-height: 1.6;
-}
-
 .bk {
   width: 14px;
   height: 18px;
@@ -749,6 +740,11 @@ button.x {
 
 .shelf-panel {
   width: 860px;
+}
+
+/* 見出しの右に数値がない画面でも、閉じるボタンは右端に置く */
+.phead h2 + .x {
+  margin-left: auto;
 }
 
 .shelf-body {
@@ -1192,9 +1188,6 @@ button.x {
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.25);
 }
-.wneed.ok {
-  color: #9fe870;
-}
 .wneed.ng {
   color: #ffb060;
 }
@@ -1267,8 +1260,8 @@ button.x {
   margin-left: auto;
 }
 
-/* 呪われた本・神殿 */
-.ktag.curse {
+/* 未鑑定の本・神殿 */
+.ktag.unid {
   background: #4a2a6a;
   color: #e8d0ff;
 }
@@ -1287,11 +1280,11 @@ button.x {
     filter: brightness(1.5);
   }
 }
-.srow.cursed {
+.srow.unid {
   border-color: #6a3a8a;
   background: rgba(60, 20, 90, 0.22);
 }
-.srow.cursed .sname {
+.srow.unid .sname {
   color: #d8b8ff;
 }
 .temple-panel .phead h2 {
@@ -1552,7 +1545,32 @@ button.danger {
   font-weight: normal;
 }
 
-/* ---------------------------------------------------------------- 装備の確認 [I] */
+/* スキルブック・装備ウィンドウの見出しのタブ */
+.phead .mtabs {
+  margin: 0;
+  border-bottom: none;
+}
+.phead .mtabs .tab {
+  font-size: 17px;
+  padding: 6px 16px;
+  border-bottom: 2px solid transparent;
+}
+.phead .mtabs .tab small {
+  font-size: 11px;
+  opacity: 0.7;
+}
+/* アイテムのタブ */
+.item-list .ikey {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #a89a80;
+}
+.book-panel .equip-body {
+  flex: 1;
+  align-content: start;
+}
+
+/* ---------------------------------------------------------------- 装備のタブ [I] */
 .equip-panel {
   width: 820px;
 }
@@ -1600,67 +1618,14 @@ button.danger {
   font-size: 12px;
   color: #c8f0a8;
 }
-.eparams {
-  display: grid;
+.equip-body {
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
 }
-.eparam {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25);
-  font-size: 13px;
-  color: #c8b89a;
-}
-.eparam b {
-  font-weight: normal;
-  font-size: 18px;
-  color: #f3ead8;
-}
-.eparam small {
-  margin-left: auto;
+/* タブの外のパラメタ：そのうち装備による分 */
+.bparams .peq {
+  margin-left: 5px;
   font-size: 11px;
   color: #a8c890;
-}
-.eqlist {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-}
-.eqlist li {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  padding: 5px 8px;
-  margin-bottom: 4px;
-  border: 1px solid rgba(176, 138, 74, 0.3);
-  border-radius: 5px;
-  background: rgba(0, 0, 0, 0.2);
-  font-size: 13px;
-}
-.eqlist li.on {
-  border-color: #6a9a4a;
-  background: rgba(100, 160, 70, 0.12);
-}
-.eqlist .n {
-  color: #f3ead8;
-}
-.eqlist small {
-  order: 1;
-  flex-basis: 100%;
-  padding-left: 26px;
-  font-size: 11px;
-  color: #c8b89a;
-}
-.eqlist em {
-  margin-left: auto;
-  font-style: normal;
-  font-size: 11px;
-  color: #9fe870;
 }
 @media (max-width: 640px) {
   .equip-body {
@@ -1688,23 +1653,42 @@ button.danger {
     color: #ffd0a0;
   }
 }
-.salebar {
-  margin: 6px 0 2px;
-  padding: 6px 10px;
-  border: 1px solid #ff7070;
-  border-radius: 5px;
-  background: rgba(150, 20, 40, 0.45);
+/* 取引画面の上に出す、セールの別ウィンドウ */
+.modal-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+}
+.modal-stack > .panel {
+  min-height: 0;
+  max-width: 100%;
+}
+.salewin {
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 8px 18px;
+  border: 2px solid #ff7070;
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 2px #000,
+    0 6px 20px rgba(0, 0, 0, 0.5);
+  background: linear-gradient(#7a1a2a, #4a0e1c);
   color: #ffe6c8;
   font-size: 14px;
+  animation: salePulse 1.6s ease-in-out infinite;
 }
-.salebar b {
+.salewin b {
   color: #ffe070;
 }
-.salebar.other {
+.salewin.other {
   border-color: #7a5a5a;
-  background: rgba(60, 30, 40, 0.4);
+  background: linear-gradient(#3e2430, #2a1820);
   color: #d8c0b8;
   font-size: 13px;
+  animation: none;
 }
 s.was {
   color: #7a6448;
@@ -1717,13 +1701,63 @@ button:disabled .salep {
   color: inherit;
 }
 
-/* ---------------------------------------------------------------- わが家のBOX */
+/* ---------------------------------------------------------------- わが家のボックス（スキルブックと同じ、左に一覧・右に詳細） */
 
 .box-panel .cmps {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
+}
+.box-panel .book-list li {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.box-panel .book-list li small {
+  flex-basis: 100%;
+  margin-left: 0;
+  padding-left: 32px;
+  font-size: 11px;
+  color: #ffd84a;
+}
+.box-panel .book-list li.none {
+  cursor: default;
+  background: none;
+  font-size: 12px;
+  color: #8a7a60;
+}
+.box-panel .eqi {
+  width: 24px;
+  font-size: 18px;
+  text-align: center;
+}
+.box-panel .bhead {
+  --c: #b08a4a;
+}
+.box-panel .bhead h3 .eqi {
+  display: inline-block;
+  margin-right: 6px;
+}
+.box-panel .estat {
+  flex: 1;
+  font-size: 14px;
+  color: #ffd84a;
+}
+.box-panel .eplus {
+  margin-left: 10px;
+  font-size: 11px;
+  color: #c8b89a;
+}
+.box-panel .efx {
+  margin: 2px 0 4px;
+  font-size: 12px;
+  color: #c8f0a8;
+}
+.box-panel .book-detail h4 {
+  margin: 12px 0 6px;
+  font-weight: normal;
+  font-size: 14px;
+  color: #ffd88a;
 }
 
 .cmp {

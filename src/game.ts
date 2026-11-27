@@ -14,10 +14,11 @@ import {
   type Vein,
 } from './entities';
 import { ARMORS, MAX_PLUS, WEAPONS, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, matDropRate, matOfEnemy, oreById, rollOre, weaponById, weaponStat, type ArmorEffect, type Recipe, type WeaponEffect, type WeaponType } from './equipment';
-import { BOOKS, CURSE_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, purifyPrice, type Stat } from './skills';
+import { BOOKS, UNIDENTIFIED_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, appraisePrice, type Stat } from './skills';
 import { HOTBAR_SIZE, MAX_CARRY, bankInterest, loadGame, newSave, saveGame, spCost, type SaveData } from './state';
 import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
 import { Terrain, type Light, type Sortable, type View } from './terrain';
+import { menuTabKey } from './ui';
 import { UI } from './ui';
 import { GAME_MIN_PER_SEC, clockOf, clockText, dayOf, discount, offText, phaseOf, saleOfDay, skyOf, sleepUntil, type Phase, type SaleDef, type SaleTarget } from './daytime';
 
@@ -53,7 +54,7 @@ export class Game {
 
   data: SaveData = newSave();
   scene: 'town' | 'dungeon' | 'home' = 'town';
-  /** わが家の家具（本棚・ベッド・BOXを調べるのに使う） */
+  /** わが家の家具（本棚・ベッド・ボックスを調べるのに使う） */
   private furniture: Furniture[] = [];
   /** いま潜っているダンジョン（町・わが家では null） */
   dungeon: DungeonDef | null = null;
@@ -207,8 +208,8 @@ export class Game {
     saveGame(this.data);
     this.ui.log('トレジャーハンターの冒険が始まった！', '#ffd84a');
     this.ui.log('[K] でスキルブックを開き、SPを使って本のレベルを上げよう。本はLv0（効果なし）から始まる。');
-    this.ui.log('スキルブックは「パラメタ」と「技」の2系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は呪われているので、町の神殿で浄化してもらおう。');
-    this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。BOXには使っていない装備がしまってあり、そこで持ち替えられる。`);
+    this.ui.log('スキルブックは「パラメタ」と「技」の2系統。道具屋やダンジョンの宝箱で集めよう。宝箱の本は未鑑定なので、道具屋で鑑定してもらおう。EXPは町の神殿でSPに変えてもらえる。');
+    this.ui.log(`本棚では、持ち歩くスキルブック（${MAX_CARRY}冊まで）を入れ替えられる。ボックスには使っていない装備がしまってあり、そこで持ち替えられる。`);
     this.startClock();
   }
 
@@ -296,12 +297,12 @@ export class Game {
     }
   }
 
-  /** 宝箱で呪われた本を拾う。正体は神殿で浄化するまで分からない（かばんの枠は使わない） */
-  private pickUpCursed(id: string) {
+  /** 宝箱で未鑑定の本を拾う。正体は道具屋で鑑定するまで分からない（かばんの枠は使わない） */
+  private pickUpUnidentified(id: string) {
     const d = this.data;
     d.curseSeq += 1;
     d.cursed.push({ no: d.curseSeq, book: id });
-    this.ui.log('呪われたスキルブックを手に入れた！ 町の神殿で浄化してもらおう。', '#c89cff');
+    this.ui.log('未鑑定のスキルブックを手に入れた！ 町の道具屋で鑑定してもらおう。', '#c89cff');
   }
 
   /** 予備の冊数 */
@@ -310,20 +311,20 @@ export class Game {
   }
 
   /**
-   * 神殿で呪われた本（通し番号 no）を浄化する。正体が分かり、レベル0から使えるようになる。
-   * 浄化した本の id を返す（できなければ null）
+   * 道具屋で未鑑定の本（通し番号 no）を鑑定する。正体が分かり、レベル0から使えるようになる。
+   * 鑑定した本の id を返す（できなければ null）
    */
-  purifyBook(no: number): string | null {
+  appraiseBook(no: number): string | null {
     const d = this.data;
     const i = d.cursed.findIndex((c) => c.no === no);
     if (i < 0) return null;
     const id = d.cursed[i].book;
-    const price = purifyPrice(bookById(id));
+    const price = appraisePrice(bookById(id));
     if (d.gold < price) return null;
     d.gold -= price;
     d.cursed.splice(i, 1);
-    this.ui.log(`呪いが解けた！ 本の正体は『${bookById(id).name}』だった。`, '#fff4c0');
-    this.acquireBook(id, '浄化した');
+    this.ui.log(`鑑定が終わった！ 本の正体は『${bookById(id).name}』だった。`, '#fff4c0');
+    this.acquireBook(id, '鑑定した');
     saveGame(d);
     return id;
   }
@@ -621,13 +622,19 @@ export class Game {
 
   // ================================================================ UIから呼ばれる操作
 
-  convertExp(): boolean {
-    const cost = spCost(this.data.spBought);
-    if (this.data.exp < cost) return false;
-    this.data.exp -= cost;
-    this.data.sp += 1;
-    this.data.spBought += 1;
-    return true;
+  /** 神殿で EXP を SP に変える。all なら変えられるだけ変える。得た SP の数を返す */
+  convertExp(all = false): number {
+    const d = this.data;
+    let n = 0;
+    while (d.exp >= spCost(d.spBought)) {
+      d.exp -= spCost(d.spBought);
+      d.sp += 1;
+      d.spBought += 1;
+      n += 1;
+      if (!all) break;
+    }
+    if (n > 0) saveGame(d);
+    return n;
   }
 
   bookLv(bookId: string): number {
@@ -695,7 +702,7 @@ export class Game {
     saveGame(this.data);
   }
 
-  /** 武器防具屋：買ってそのまま装備する（外した装備はわが家のBOXへ） */
+  /** 武器防具屋：買ってそのまま装備する（外した装備はわが家のボックスへ） */
   buyEquip(kind: 'weapon' | 'armor', id: string) {
     const d = this.data;
     const def = kind === 'weapon' ? WEAPONS.find((w) => w.id === id) : ARMORS.find((a) => a.id === id);
@@ -708,12 +715,12 @@ export class Game {
     this.wearNew(kind, id);
   }
 
-  /** 手に入れた装備をその場で身につけ、外した装備はわが家のBOXへ送る */
+  /** 手に入れた装備をその場で身につけ、外した装備はわが家のボックスへ送る */
   private wearNew(kind: 'weapon' | 'armor', id: string) {
     const d = this.data;
     const prev = kind === 'weapon' ? weaponById(d.weapon) : armorById(d.armor);
     this.equip(kind, id);
-    this.ui.log(`外した${eqName(prev.name, this.plusOf(prev.id))}は、わが家のBOXにしまった。`);
+    this.ui.log(`外した${eqName(prev.name, this.plusOf(prev.id))}は、わが家のボックスにしまった。`);
   }
 
   /** 武器防具屋に装備を売る。装備中の品と最初の装備は売れない。鍛えた分（+n）はなくなる */
@@ -766,7 +773,7 @@ export class Game {
     return true;
   }
 
-  /** 鍛冶場：鉱石と魔物の素材から、作成専用の武器・防具を作ってそのまま装備する（外した装備はBOXへ） */
+  /** 鍛冶場：鉱石と魔物の素材から、作成専用の武器・防具を作ってそのまま装備する（外した装備はボックスへ） */
   craftEquip(kind: 'weapon' | 'armor', id: string): boolean {
     const d = this.data;
     const def = kind === 'weapon' ? WEAPONS.find((x) => x.id === id) : ARMORS.find((x) => x.id === id);
@@ -817,7 +824,7 @@ export class Game {
     this.ui.log(`${ore.name}の鉱脈を掘りあてた！`, ore.color[0]);
   }
 
-  /** 持っている武器・防具に持ち替える（ふだんはわが家のBOXから） */
+  /** 持っている武器・防具に持ち替える（ふだんはわが家のボックスから） */
   equip(kind: 'weapon' | 'armor', id: string) {
     const d = this.data;
     if (!(kind === 'weapon' ? d.weapons : d.armors).includes(id)) return;
@@ -924,12 +931,10 @@ export class Game {
     }
     if (!this.started) return;
     this.advanceClock(dt);
-    if (inp.pressed('KeyK', 'Tab')) {
-      this.ui.showSkillbook();
-      return;
-    }
-    if (inp.pressed('KeyI')) {
-      this.ui.showEquipment();
+    // スキルブック・装備・アイテムのウィンドウ（Tab は前回のタブで開く）
+    const tab = menuTabKey(inp);
+    if (tab || inp.pressed('Tab')) {
+      this.ui.showMenu(tab ?? undefined);
       return;
     }
     if (inp.pressed('Escape')) {
@@ -1060,7 +1065,7 @@ export class Game {
     }
   }
 
-  private usePotion() {
+  usePotion() {
     const p = this.player;
     if (this.data.potions <= 0) return this.float(p.x, p.y - 34, '回復薬がない', '#ff9090');
     if (p.hp >= MAX_HP) return this.float(p.x, p.y - 34, '体力は満タン', '#cccccc');
@@ -1070,7 +1075,7 @@ export class Game {
     this.burst(p.x, p.y - 12, '#7af07a', 12, 60);
   }
 
-  private useEther() {
+  useEther() {
     const p = this.player;
     if (this.data.ethers <= 0) return this.float(p.x, p.y - 34, 'エーテルがない', '#ff9090');
     if (p.mp >= MAX_MP) return this.float(p.x, p.y - 34, 'MPは満タン', '#cccccc');
@@ -1476,7 +1481,7 @@ export class Game {
     if (e.def.boss) this.passTrial();
     const cost = spCost(this.data.spBought);
     if (this.data.exp >= cost && this.data.exp - e.exp < cost) {
-      this.ui.log('EXPが貯まった！ [K] スキルブックでSPに変換できる。', '#9fe870');
+      this.ui.log('EXPが貯まった！ 町の神殿でSPに変えてもらえる。', '#9fe870');
     }
   }
 
@@ -1778,7 +1783,7 @@ export class Game {
         const ny = Math.max(f.y * TILE, Math.min((f.y + f.h) * TILE, p.y));
         if (dist(p.x, p.y, nx, ny) < 22) {
           if (f.kind === 'shelf') return { label: '本棚を見る', act: () => this.ui.showShelf() };
-          if (f.kind === 'box') return { label: 'BOXを開ける（装備の持ち替え）', act: () => this.ui.showBox() };
+          if (f.kind === 'box') return { label: 'ボックスを開ける（装備の持ち替え）', act: () => this.ui.showBox() };
           return { label: this.sleepsTillMorning() ? 'ベッドで眠る（朝まで）' : 'ベッドで休む', act: () => this.sleep() };
         }
       }
@@ -1848,10 +1853,10 @@ export class Game {
       }
       case 'book': {
         const b = bookById(ct.book);
-        // ダンジョンで拾った本は呪われている
-        this.pickUpCursed(b.id);
-        this.effects.push({ type: 'icon', x: cx, y: cy, t: 0, dur: 1.6, color: CURSE_COLOR });
-        this.ring(cx, cy, 6, 50, CURSE_COLOR, 0.5);
+        // ダンジョンで拾った本は未鑑定
+        this.pickUpUnidentified(b.id);
+        this.effects.push({ type: 'icon', x: cx, y: cy, t: 0, dur: 1.6, color: UNIDENTIFIED_COLOR });
+        this.ring(cx, cy, 6, 50, UNIDENTIFIED_COLOR, 0.5);
         this.burst(cx, cy - 10, '#5a2a7a', 14, 70);
         break;
       }
@@ -2307,7 +2312,8 @@ export class Game {
   }
 
   /**
-   * 町とわが家の時刻の明るさ。朝焼け・夕焼けの色を乗算で掛け、夜は暗くして街灯や窓の灯りだけ明るく残す
+   * 町とわが家の時刻の明るさ。朝焼け・夕焼けの色を乗算で掛け、夜は暗くして街灯や窓の灯りだけ明るく残す。
+   * わが家は外より少し穏やかで、夜は暖炉とろうそくの灯りだけが明るく残る
    */
   private drawDaylight(v: View, camX: number, camY: number) {
     const sky = skyOf(this.data.minutes);
@@ -2324,7 +2330,13 @@ export class Game {
       ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
       ctx.restore();
     }
-    if (home) return;
+    if (home) {
+      if (sky.dark > 0.01) {
+        const p = this.player;
+        this.shade([{ x: p.x, y: p.y - 10, r: 90 }, ...this.terrain.lights(v)], `rgba(10,8,30,${(sky.dark * 0.85).toFixed(3)})`, camX, camY);
+      }
+      return;
+    }
     if (sky.dark > 0.01) {
       const p = this.player;
       const lights: Light[] = [{ x: p.x, y: p.y - 10, r: 120 }, ...this.terrain.lights(v)];

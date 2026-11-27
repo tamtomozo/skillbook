@@ -161,7 +161,7 @@ export function buildTown() {
   // 武器防具屋
   rect(25, 15, 6, 3, T.HOUSE);
   m.set(27, 17, T.SMITHY_DOOR);
-  // 神殿（呪われた本を浄化する）
+  // 神殿（EXPをSPに変える）
   rect(2, 2, 6, 3, T.HOUSE);
   m.set(4, 4, T.TEMPLE_DOOR);
   // 銀行（お金を預ける）

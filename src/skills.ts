@@ -254,15 +254,15 @@ export function bookSummary(b: BookDef): string {
 
 export const TREASURE_NAME = '星詠みの羅針盤';
 
-/** 呪われた本（ダンジョンで拾い、まだ浄化していない本）の見た目と、神殿での浄化の代金 */
-export const CURSE_COLOR = '#6a3a8a';
-export const CURSED_NAME = '呪われた書';
-/** 神殿での浄化の代金は本の系統で変わる（強い本ほど呪いも強い） */
-export const PURIFY_PRICE: Record<BookKind, number> = { stat: 150, tech: 350 };
-/** 神官が感じとる呪いの強さ（代金とあわせて、正体の手がかりになる） */
-export const CURSE_POWER: Record<BookKind, string> = { stat: '弱い呪い', tech: 'とても強い呪い' };
-export function purifyPrice(b: BookDef): number {
-  return PURIFY_PRICE[b.kind];
+/** 未鑑定の本（ダンジョンで拾い、まだ鑑定していない本）の見た目と、道具屋での鑑定の代金 */
+export const UNIDENTIFIED_COLOR = '#6a3a8a';
+export const UNIDENTIFIED_NAME = '未鑑定の書';
+/** 道具屋での鑑定の代金は本の系統で変わる（強い本ほど鑑定に手間がかかる） */
+export const APPRAISE_PRICE: Record<BookKind, number> = { stat: 150, tech: 350 };
+/** 店主が感じとる本の力（代金とあわせて、正体の手がかりになる） */
+export const APPRAISE_HINT: Record<BookKind, string> = { stat: 'かすかな力', tech: 'ただならぬ力' };
+export function appraisePrice(b: BookDef): number {
+  return APPRAISE_PRICE[b.kind];
 }
 
 /** ダンジョンでしか見つからない本を道具屋が買い取る値段 */

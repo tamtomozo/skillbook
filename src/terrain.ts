@@ -7,7 +7,7 @@
 import { TILE } from './constants';
 import { RNG } from './rng';
 import { T, type Building, type Furniture, type TileMap } from './map';
-import { drawHomeGround, homeObjects } from './home';
+import { drawHomeGround, homeLights, homeObjects } from './home';
 import { ellipsePath, glow, groundShadow } from './art';
 
 type C = CanvasRenderingContext2D;
@@ -1879,7 +1879,7 @@ export class Terrain {
   drawGround(ctx: C, v: View, time: number) {
     const P = patterns(ctx);
     if (this.scene === 'dungeon') this.drawDungeon(ctx, P, v, time);
-    else if (this.scene === 'home') drawHomeGround(ctx, this.map, time);
+    else if (this.scene === 'home') drawHomeGround(ctx, this.map, time, this.clock);
     else this.drawTown(ctx, P, v, time);
   }
 
@@ -2147,6 +2147,7 @@ export class Terrain {
     for (const d of this.decor) {
       if (d.kind === 'crystal' && this.map.isExplored(d.tx, d.ty) && near(d.x, d.y, 80)) out.push({ x: d.x, y: d.y - 4, r: 80, tint: 'rgba(120,200,255,0.12)' });
     }
+    if (this.scene === 'home') out.push(...homeLights(this.furniture));
     if (this.scene === 'town' && this.night > 0) {
       const n = this.night;
       for (const l of this.lamps) if (near(l.x, l.y - 30, 100)) out.push({ x: l.x, y: l.y - 22, r: 100 * (0.5 + 0.5 * n), tint: `rgba(255,190,100,${0.2 * n})` });
