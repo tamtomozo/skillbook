@@ -334,9 +334,14 @@ function drawShelf(ctx: C, f: Furniture, colors: string[], time: number) {
   const rows = 4;
   const innerTop = top + 6;
   const rowH = (bottom - top - 12) / rows;
-  // しまってあるスキルブックは真ん中の2段に並べる
+  // しまってあるスキルブックは真ん中の2段に4冊ずつ交互に並べる。段がいっぱいなら上の段、下の段へ。どこにも入らなければ並べない
   const special: string[][] = [[], [], [], []];
-  colors.forEach((c, i) => special[1 + (Math.floor(i / 4) % 2)].push(c));
+  const cap = Math.floor((w - 16 - 3) / 9.5);
+  colors.forEach((c, i) => {
+    const pref = Math.floor(i / 4) % 2 ? [2, 1, 0, 3] : [1, 2, 0, 3];
+    const row = pref.find((r) => special[r].length < cap);
+    if (row !== undefined) special[row].push(c);
+  });
 
   for (let row = 0; row < rows; row++) {
     const base = innerTop + rowH * (row + 1) - 2.5;

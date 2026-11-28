@@ -1971,7 +1971,11 @@ export class Game {
     const k = d * z;
     ctx.setTransform(k, 0, 0, k, -camX * k, -camY * k);
     if (this.scene === 'home') {
-      this.terrain.shelfColors = this.data.books.filter((b) => !this.data.carried.includes(b)).map((b) => bookById(b).color);
+      // しまってある本のあとに、未鑑定の本も並べる
+      this.terrain.shelfColors = [
+        ...this.data.books.filter((b) => !this.data.carried.includes(b)).map((b) => bookById(b).color),
+        ...this.data.cursed.map(() => UNIDENTIFIED_COLOR),
+      ];
       this.terrain.cleared = this.data.cleared;
     }
     this.terrain.drawGround(ctx, view, this.time);

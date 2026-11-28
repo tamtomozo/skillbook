@@ -3,7 +3,7 @@ import type { Input } from './input';
 import { MAX_HP, MAX_MP } from './constants';
 import { FIELD_DUNGEONS, RANKS, RANK_B, RUINS, dungeonById, rankDef, trialFor, type DungeonDef } from './dungeons';
 import { BOOKS, BOOK_KIND_NAME, APPRAISE_HINT, SCHOOL_NAME, SCHOOL_WEAPON, SKILLS, STANCES, STATS, stanceText, STAT_ICON, STAT_NAME, TREASURE_NAME, bookById, bookMaxLv, bookSummary, bookTag, luckText, lvUpCost, appraisePrice, sellPrice, UNIDENTIFIED_COLOR, UNIDENTIFIED_NAME, spSpent, type BookKind, type School, type Stat } from './skills';
-import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost, type UnidentifiedBook } from './state';
+import { BANK_INTEREST_CAP, BANK_RATE, HOTBAR_SIZE, MAX_CARRY, bankInterest, hasSave, spCost } from './state';
 import { PHASE_ICON, PHASE_NAME, clockText, offText, phaseOf, type SaleTarget } from './daytime';
 import type { BookDef } from './skills';
 import { ARMORS, ARMOR_EFFECT_TEXT, MATS, MAX_PLUS, ORES, WEAPONS, WEAPON_EFFECT_TEXT, WEAPON_TYPE_ICON, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, oreById, weaponById, weaponStat, weaponStatText, type ArmorDef, type Recipe, type WeaponDef, type WeaponType } from './equipment';
@@ -615,12 +615,23 @@ export class UI {
     const bagHtml =
       bag.map((b) => this.shelfCard(b, true, full)).join('') +
       Array.from({ length: MAX_CARRY - bag.length }, () => '<div class="bcard empty">空き</div>').join('');
-    const shelfHtml = shelf.length ? shelf.map((b) => this.shelfCard(b, false, full)).join('') : '<p class="note">本棚は空っぽだ。</p>';
+    // 未鑑定の本も本棚に並べる（正体が分かるまでかばんには入れられない）
+    const unidHtml = d.cursed
+      .map((c) => {
+        const b = bookById(c.book);
+        return `<div class="bcard cursed" style="--c:${UNIDENTIFIED_COLOR}">
+      <div class="spine"></div>
+      <div class="binfo"><div class="bname">${UNIDENTIFIED_NAME}<span class="ktag unid">正体不明</span></div><div class="bskills"><span class="sk">${APPRAISE_HINT[b.kind]}を秘めているようだ</span></div></div>
+      <div class="bact"><small class="unid-hint">道具屋で鑑定</small></div>
+    </div>`;
+      })
+      .join('');
+    const shelfHtml = shelf.length || unidHtml ? shelf.map((b) => this.shelfCard(b, false, full)).join('') + unidHtml : '<p class="note">本棚は空っぽだ。</p>';
     this.open(
       'shelf',
       `<div class="panel shelf-panel">
         <div class="phead"><h2>📚 本棚</h2><button class="x" data-act="close">✕</button></div>
-        <p class="note">持ち歩けるスキルブックは${MAX_CARRY}冊まで。本棚にある本のスキルは、習得していても使えない。どの本を持っていくか選ぼう。${d.cursed.length ? `<br>未鑑定の本が ${d.cursed.length} 冊ある。町の道具屋で鑑定しよう。` : ''}</p>
+        <p class="note">持ち歩けるスキルブックは${MAX_CARRY}冊まで。本棚にある本のスキルは、習得していても使えない。どの本を持っていくか選ぼう。${d.cursed.length ? `<br>未鑑定の本は、町の道具屋で鑑定するまで使えない。` : ''}</p>
         <div class="shelf-body">
           <section><h4>🎒 かばん（持ち歩く本）</h4>${bagHtml}</section>
           <section><h4>📚 本棚</h4>${shelfHtml}</section>
@@ -1048,11 +1059,6 @@ export class UI {
 
   // ---------------------------------------------------------------- 道具屋の鑑定
 
-  /** 未鑑定の本の呼び名（拾った順の通し番号をつける） */
-  private unidentifiedName(c: UnidentifiedBook): string {
-    return `${UNIDENTIFIED_NAME} #${c.no}`;
-  }
-
   /** 道具屋の「鑑定」タブの中身 */
   private appraiseList(): string {
     const d = this.game.data;
@@ -1062,7 +1068,7 @@ export class UI {
         const price = appraisePrice(b);
         return `<div class="srow unid">
           <div class="sicon book" style="--c:${UNIDENTIFIED_COLOR}">📕</div>
-          <div class="sinfo"><div class="sname">${this.unidentifiedName(c)}<span class="ktag unid">正体不明</span></div><div class="sdesc"><span class="cpow ${b.kind}">${APPRAISE_HINT[b.kind]}</span>を秘めているようだ。</div></div>
+          <div class="sinfo"><div class="sname">${UNIDENTIFIED_NAME}<span class="ktag unid">正体不明</span></div><div class="sdesc"><span class="cpow ${b.kind}">${APPRAISE_HINT[b.kind]}</span>を秘めているようだ。</div></div>
           <div class="sact"><button data-act="appraise" data-arg="${c.no}" ${d.gold >= price ? '' : 'disabled'}>鑑定する<br><small>${price} G</small></button></div>
         </div>`;
       })
