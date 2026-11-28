@@ -16,11 +16,17 @@ import {
 import { ARMORS, MAX_PLUS, WEAPONS, WEAPON_TYPE_NAME, armorById, armorDef, damageRate, eqName, eqSellPrice, forgeCost, forgeOre, matById, matDropRate, matOfEnemy, oreById, rollOre, weaponById, weaponStat, type ArmorEffect, type Recipe, type WeaponEffect, type WeaponType } from './equipment';
 import { BOOKS, UNIDENTIFIED_COLOR, SCHOOL_WEAPON, STANCES, STANCE_BOOST, sellPrice, spSpent, SKILLS, TREASURE_NAME, bookById, bookMaxLv, bookOfSkill, critRate, dropMult, goldMult, isMagic, lvUpCost, appraisePrice, type Stat } from './skills';
 import { HOTBAR_SIZE, MAX_CARRY, bankInterest, loadGame, newSave, saveGame, spCost, type SaveData } from './state';
-import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
+import { drawArrow, drawBook, drawOrb, drawChest, drawWhite, drawEnemy, drawFireball, drawHunter, drawOreVein, drawOrbitSword, drawPickup, drawSlashWave, ellipsePath, glow, groundShadow, hoverOf } from './art';
 import { Terrain, type Light, type Sortable, type View } from './terrain';
 import { menuTabKey } from './ui';
 import { UI } from './ui';
 import { GAME_MIN_PER_SEC, clockOf, clockText, dayOf, discount, offText, phaseOf, saleOfDay, skyOf, sleepUntil, type Phase, type SaleDef, type SaleTarget } from './daytime';
+
+/** 旋舞剣の剣が回る楕円の半径（横・縦） */
+const ORBIT_RX = 54;
+const ORBIT_RY = 39;
+/** 旋舞剣を重ねて使ったときの剣の最大数（1回で3本ずつ増える） */
+const ORBIT_MAX = 6;
 
 interface Interact {
   label: string;
@@ -83,6 +89,9 @@ export class Game {
   private flameTick = 0;
   private bladesT = 0;
   private bladesTick = 0;
+  /** 旋舞剣：自分のまわりを回る剣（最大 ORBIT_MAX 本）。値はそれぞれの剣の角度のずれ */
+  private orbit: number[] = [];
+  private orbitAng = 0;
   /** 盾の技の効果時間 */
   private ironwallT = 0;
   /** 2段階の書の1段目で入った状態（このフロアにいる間だけ続く） */
@@ -448,6 +457,7 @@ export class Game {
     this.veins = [];
     this.flameT = 0;
     this.bladesT = 0;
+    this.orbit = [];
     this.ironwallT = this.reflectT = this.sanctT = this.bulwarkT = 0;
     this.stances.clear();
     const p = this.player;
@@ -1034,7 +1044,70 @@ export class Game {
         }
       }
     }
+    this.updateOrbit(dt);
     this.updateShieldArts(dt);
+  }
+
+  /** 旋舞剣の i 本目の剣の位置（足もとの高さ） */
+  private orbitPos(i: number): { x: number; y: number; a: number } {
+    const p = this.player;
+    const a = this.orbitAng + this.orbit[i];
+    return { x: p.x + Math.cos(a) * ORBIT_RX, y: p.y + Math.sin(a) * ORBIT_RY, a };
+  }
+
+  /** 旋舞剣の剣を増やす（最大 ORBIT_MAX 本）。新しい剣は、いちばん大きく空いているすきまに入る */
+  private addOrbit(n: number) {
+    const TAU = Math.PI * 2;
+    const wrap = (a: number) => ((a % TAU) + TAU) % TAU;
+    if (this.orbit.length === 0) {
+      const m = Math.min(n, ORBIT_MAX);
+      this.orbit = Array.from({ length: m }, (_, i) => (i * TAU) / m);
+      return;
+    }
+    for (let k = 0; k < n && this.orbit.length < ORBIT_MAX; k++) {
+      // 1本目から見た角度の順に並べ、いちばん広いすきまの真ん中に入れる
+      const base = this.orbit[0];
+      const rel = this.orbit.map((o) => wrap(o - base)).sort((a, b) => a - b);
+      let gap = -1;
+      let at = 0;
+      for (let i = 0; i < rel.length; i++) {
+        const next = i + 1 < rel.length ? rel[i + 1] : TAU;
+        if (next - rel[i] > gap) {
+          gap = next - rel[i];
+          at = rel[i] + gap / 2;
+        }
+      }
+      rel.push(at);
+      rel.sort((a, b) => a - b);
+      this.orbit = rel.map((r) => base + r);
+    }
+  }
+
+  /** 旋舞剣：剣を回し、敵に当たった剣はダメージを与えて消える。残った剣は等間隔に並び直す */
+  private updateOrbit(dt: number) {
+    const n = this.orbit.length;
+    if (n === 0) return;
+    const p = this.player;
+    this.orbitAng += dt * 4.5;
+    // 等間隔の位置へなめらかに寄せる（1本目を基準に、並び順はそのまま）
+    const TAU = Math.PI * 2;
+    const k = Math.min(1, dt * 6);
+    for (let i = 1; i < n; i++) {
+      const want = this.orbit[0] + (i * TAU) / n;
+      let d = (want - this.orbit[i]) % TAU;
+      if (d > Math.PI) d -= TAU;
+      if (d < -Math.PI) d += TAU;
+      this.orbit[i] += d * k;
+    }
+    for (let i = this.orbit.length - 1; i >= 0; i--) {
+      const b = this.orbitPos(i);
+      const e = this.enemies.find((e) => e.alive && dist(b.x, b.y, e.x, e.y) < 10 + e.w / 2);
+      if (!e) continue;
+      this.orbit.splice(i, 1);
+      this.hitEnemy(e, 30 + this.atk * 1.6, p.x, p.y, 280);
+      this.effects.push({ type: 'slash', x: b.x, y: b.y, ang: b.a + Math.PI / 2, t: 0, dur: 0.2, size: 1.1 });
+      this.burst(b.x, b.y - 16, '#ff9a70', 10, 90);
+    }
   }
 
   /** 鉄壁・反射の盾・聖域・奥義不落の時間経過 */
@@ -1358,16 +1431,14 @@ export class Game {
         this.float(p.x, p.y - 48, '不落の構え！', '#ffe080');
         return true;
       // ---------------------------------------------------------------- 2段階の書の2段目
-      case 'zantetsu':
-        this.swing(0.3);
-        for (const da of [-0.25, 0, 0.25]) {
-          const a = aim + da;
-          const vx = Math.cos(a);
-          const vy = Math.sin(a);
-          this.projectiles.push({ x: p.x + vx * 14, y: p.y + vy * 14, vx: vx * 400, vy: vy * 400, r: 16, dmg: 30 + this.atk * 1.6, life: 0.7, maxLife: 0.7, from: 'player', kind: 'wave', hits: [] });
+      case 'zantetsu': // 旋舞剣（セーブとの互換のため id はそのまま）
+        if (this.orbit.length >= ORBIT_MAX) {
+          this.float(p.x, p.y - 34, `剣はもう${ORBIT_MAX}本そろっている`, '#cccccc');
+          return false;
         }
-        this.ring(p.x + p.aimX * 16, p.y + p.aimY * 14, 8, 50, '#ff9a70', 0.3);
-        this.shake = Math.max(this.shake, 0.15);
+        this.addOrbit(3);
+        this.ring(p.x, p.y, 10, ORBIT_RX, '#ff9a70', 0.35);
+        this.burst(p.x, p.y - 16, '#ffb090', 14, 80);
         return true;
       case 'meteor': {
         const targets = this.visibleEnemies(LIGHT_R + 60).slice(0, 3);
@@ -1385,12 +1456,12 @@ export class Game {
       }
       case 'judgment': {
         this.swing(0.3);
-        this.ring(p.x, p.y, 10, 120, '#fff0a0', 0.5);
-        this.ring(p.x, p.y, 6, 80, '#ffffff', 0.35);
-        this.burst(p.x, p.y - 6, '#ffe890', 24, 140);
+        this.ring(p.x, p.y, 10, 180, '#fff0a0', 0.5);
+        this.ring(p.x, p.y, 6, 120, '#ffffff', 0.35);
+        this.burst(p.x, p.y - 6, '#ffe890', 36, 210);
         this.shake = 0.25;
         for (const e of this.enemies) {
-          if (!e.alive || dist(p.x, p.y, e.x, e.y) >= 120 + e.w / 2) continue;
+          if (!e.alive || dist(p.x, p.y, e.x, e.y) >= 180 + e.w / 2) continue;
           this.hitEnemy(e, 25 + this.stat('def') * 1.4 + this.atk * 0.5, p.x, p.y, 400);
           e.stun = Math.max(e.stun, 2);
         }
@@ -2147,6 +2218,13 @@ export class Game {
         }
       },
     });
+
+    // 旋舞剣：奥にある剣はキャラの後ろ、手前の剣はキャラの前に描く
+    for (let i = 0; i < this.orbit.length; i++) {
+      const b = this.orbitPos(i);
+      const tip = Math.atan2(Math.cos(b.a) * ORBIT_RY, -Math.sin(b.a) * ORBIT_RX);
+      list.push({ y: b.y + p.h / 2, draw: () => drawOrbitSword(ctx, b.x, b.y - 16, tip, this.time) });
+    }
 
     for (const e of this.enemies) {
       if (!inView(e.x, e.y, 60)) continue;

@@ -132,8 +132,8 @@ const SKILL_LIST: SkillDef[] = [
   { id: 'fortress', name: '要塞', kind: 'passive', lv: 3, mp: 0, cd: 0, icon: '🏰', desc: '防御力の30%が攻撃力に加わる。' },
   { id: 'bulwark', name: '奥義・不落', kind: 'active', lv: 5, mp: 40, cd: 16, icon: '🌟', desc: '2.5秒間あらゆる攻撃を受け止め、最後に周囲へ強烈な衝撃波を放つ。防御力が高いほど強い。' },
   // ---- 2段階の書（1段目で「状態」に入り、そのフロアのあいだ2段目が使える）
-  { id: 'kenkiup', name: '剣気解放', kind: 'active', lv: 1, mp: 20, cd: 1, icon: '⚜️', stance: 'kenki', desc: '【1段目】剣気をまとい、このフロアにいる間ずっと攻撃力が15%上がる。剣気のあいだは2段目「斬鉄閃」が使える。' },
-  { id: 'zantetsu', name: '斬鉄閃', kind: 'active', lv: 3, mp: 22, cd: 2.5, icon: '💫', needs: 'kenki', desc: '【2段目】剣気のときだけ使える。敵を貫く巨大な斬撃を3本、扇状に飛ばす。' },
+  { id: 'kenkiup', name: '剣気解放', kind: 'active', lv: 1, mp: 20, cd: 1, icon: '⚜️', stance: 'kenki', desc: '【1段目】剣気をまとい、このフロアにいる間ずっと攻撃力が15%上がる。剣気のあいだは2段目「旋舞剣」が使える。' },
+  { id: 'zantetsu', name: '旋舞剣', kind: 'active', lv: 3, mp: 22, cd: 2.5, icon: '🗡️', needs: 'kenki', desc: '【2段目】剣気のときだけ使える。自分のまわりを回る3本の剣を呼び出す。剣は敵に当たるとダメージを与えて消える。重ねて使うと最大6本まで増える。' },
   { id: 'manaup', name: '魔力覚醒', kind: 'active', lv: 1, mp: 20, cd: 1, icon: '💠', stance: 'manaflow', desc: '【1段目】眠れる魔力を呼び覚まし、このフロアにいる間ずっと魔力が15%上がる。覚醒のあいだは2段目「メテオ」が使える。' },
   { id: 'meteor', name: 'メテオ', kind: 'active', lv: 3, mp: 32, cd: 4, icon: '🌋', needs: 'manaflow', desc: '【2段目】魔力覚醒のときだけ使える。近くの敵3体に隕石を落とし、まわりごと吹き飛ばす。' },
   { id: 'oathup', name: '守護の誓い', kind: 'active', lv: 1, mp: 20, cd: 1, icon: '🔰', stance: 'oath', desc: '【1段目】守りを誓い、このフロアにいる間ずっと防御力が15%上がる。誓いのあいだは2段目「審判の盾」が使える。' },

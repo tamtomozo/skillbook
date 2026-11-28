@@ -2836,6 +2836,42 @@ export function drawSlashWave(ctx: C, x: number, y: number, ang: number, fade: n
   ctx.restore();
 }
 
+/** 旋舞剣：自分のまわりを回る光の剣。ang は切っ先の向き */
+export function drawOrbitSword(ctx: C, x: number, y: number, ang: number, time: number) {
+  glow(ctx, x, y, 16, '#ff7a50', 0.35 + Math.sin(time * 10) * 0.08);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  // 残像
+  ctx.fillStyle = 'rgba(255,150,100,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(-14, -2.5);
+  ctx.lineTo(4, 0);
+  ctx.lineTo(-14, 2.5);
+  ctx.closePath();
+  ctx.fill();
+  // 柄と鍔
+  ctx.fillStyle = '#5a3018';
+  ctx.fillRect(-10, -1.2, 4, 2.4);
+  ctx.fillStyle = '#ffc860';
+  ctx.fillRect(-6.4, -3.6, 1.6, 7.2);
+  // 刀身
+  ctx.fillStyle = lin(ctx, 0, -1.8, 0, 1.8, [
+    [0, '#ffffff'],
+    [0.5, '#ffd8c0'],
+    [1, '#e0704a'],
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(-4.8, -1.8);
+  ctx.lineTo(9, -1.2);
+  ctx.lineTo(12, 0);
+  ctx.lineTo(9, 1.2);
+  ctx.lineTo(-4.8, 1.8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawBomb(ctx: C, x: number, y: number, time: number) {
   ctx.fillStyle = rad(ctx, x - 2, y - 2, 0.5, x, y, 6.5, [
     [0, '#7a7a88'],
